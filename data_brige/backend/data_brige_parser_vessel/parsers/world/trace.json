@@ -1,0 +1,32 @@
+[{"operation_type": 0, "x": null, "y": null, "z": null, 
+ "direction_condition": 0, "delay": null, "lat": 45.313, "lon": 28.879, 
+ "zoom": 1, "checking": false}, {"operation_type": 1, "x": 350, "y": 0, "z": 
+ null, "direction_condition": null, "delay": null, "lat": -0.1, "lon": -61.5, 
+ "zoom": 3, "checking": false}, {"operation_type": 1, "x": 350, "y": 350, 
+ "z": null, "direction_condition": null, "delay": null, "lat": 52.2, "lon": 
+ -123.0, "zoom": 3, "checking": false}, {"operation_type": 1, "x": 350, "y": 
+ -350, "z": null, "direction_condition": null, "delay": null, "lat": -0.1, 
+ "lon": 175.4, "zoom": 3, "checking": false}, {"operation_type": 1, "x": 350, 
+ "y": -350, "z": null, "direction_condition": null, "delay": null, "lat": 
+ -52.3, "lon": 113.9, "zoom": 3, "checking": false}, {"operation_type": 1, 
+ "x": 350, "y": 350, "z": null, "direction_condition": null, "delay": null, 
+ "lat": -0.1, "lon": 52.4, "zoom": 3, "checking": false}, {"operation_type": 
+ 1, "x": 350, "y": 350, "z": null, "direction_condition": null, "delay": 
+ null, "lat": 52.2, "lon": -9.1, "zoom": 3, "checking": false}, 
+ {"operation_type": 1, "x": 350, "y": -350, "z": null, "direction_condition": 
+ null, "delay": null, "lat": -0.1, "lon": -44.6, "zoom": 3, "checking": 
+ false}, {"operation_type": 1, "x": 350, "y": -350, "z": null, 
+ "direction_condition": null, "delay": null, "lat": -52.3, "lon": -44.6, 
+ "zoom": 3, "checking": false}, {"operation_type": 1, "x": 0, "y": 350, "z": 
+ null, "direction_condition": null, "delay": null, "lat": -0.1, "lon": -44.6, 
+ "zoom": 3, "checking": false}, {"operation_type": 1, "x": 0, "y": 350, "z": 
+ null, "direction_condition": null, "delay": null, "lat": 52.2, "lon": -44.6, 
+ "zoom": 3, "checking": false}, {"operation_type": 1, "x": 0, "y": 350, "z": 
+ null, "direction_condition": null, "delay": null, "lat": 74.3, "lon": -44.6, 
+ "zoom": 3, "checking": true}, {"operation_type": 3, "x": null, "y": null, "z": null,
+ "direction_condition": 1, "delay": null, "lat": 44.13, "lon": 28.643,
+ "zoom": 15, "checking": false}, {"operation_type": 4, "x": null, "y": null,
+ "z": null, "direction_condition": null, "delay": 0, "lat": 44.13, "lon":
+ 28.643, "zoom": 15, "checking": false}, {"operation_type": 6, "x": null,
+ "y": null, "z": null, "direction_condition": 1, "delay": null, "lat": null,
+ "lon": null, "zoom": null, "checking": false}]
