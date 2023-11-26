@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "Balance"
+version = "0.1.0"
+description = ""
+authors = ["Konstantin Kovalenko <neokkv@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+django = "^4.2.4"
+psycopg2 = "^2.9.7"
+django-cors-headers = "^4.2.0"
+python-dotenv = "^1.0.0"
+fastapi = {extras = ["all"], version = "^0.104.1"}
+pydantic = "^2.5.1"
+psutil = "^5.9.6"
+uvicorn = "^0.24.0.post1"
+djangorestframework = "^3.14.0"
+djangorestframework-simplejwt = "^5.3.0"
+django-filter = "^23.4"
+jsonfield = "^3.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

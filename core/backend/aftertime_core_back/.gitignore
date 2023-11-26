@@ -1,0 +1,19 @@
+# created by virtualenv automatically
+/.venv
+
+/.venv/AfterimeBalance_BackEnd.iml
+/.venv/misc.xml
+/.idea
+
+/config/settings/settings_secret_key.py
+/config/settings/dev_databases_postgresql.py
+/config/settings/devDocker_databases_postgresql.py
+/config/settings/dev_databases.py
+/config/settings/test_databases.py
+/config/settings/test_databases_postgresql.py
+.env
+
+/log/general.log
+
+
+/db.sqlite3
