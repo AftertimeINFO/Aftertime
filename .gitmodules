@@ -1,0 +1,4 @@
+[submodule "core/frontend/aftertime_vessile_front"]
+	path = core/frontend/aftertime_vessile_front
+	url = https://github.com/AftertimeINFO/aftertime_vessile_front.git
+	branch = main
