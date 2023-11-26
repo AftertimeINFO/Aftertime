@@ -2,3 +2,7 @@
 	path = core/frontend/aftertime_vessile_front
 	url = https://github.com/AftertimeINFO/aftertime_vessile_front.git
 	branch = main
+[submodule "core/backend/aftertime_core_back"]
+	path = core/backend/aftertime_core_back
+	url = https://github.com/AftertimeINFO/aftertime_core_back.git
+	branch = main
