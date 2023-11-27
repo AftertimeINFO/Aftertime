@@ -6,3 +6,7 @@
 	path = core/backend/aftertime_core_back
 	url = https://github.com/AftertimeINFO/aftertime_core_back.git
 	branch = main
+[submodule "data_bridge/data_bridge_parser_vessel"]
+	path = data_bridge/data_bridge_parser_vessel
+	url = https://github.com/AftertimeINFO/data_bridge_parser_vessel.git
+	branch = main
