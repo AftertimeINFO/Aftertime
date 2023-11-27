@@ -1,2 +1,2 @@
 core/infrastructure/postgress/pgdata
-core/infrastructure/nginx_manager/data/logs/
+core/infrastructure/nginx_manager/data/logs
