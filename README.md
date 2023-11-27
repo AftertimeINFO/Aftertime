@@ -3,16 +3,10 @@
 
 # Deployment
 
-### Clone project
+### Clone project with submodules
 ```
-git clone https://github.com/AftertimeINFO/aftertime_prod.git
-```
-
-### Load submodules
-```
+git clone --recurse-submodules https://github.com/AftertimeINFO/aftertime_prod.git
 cd aftertime_prod
-git submodule init
-git submodule update
 ```
 
 ### Initialize environment variables
