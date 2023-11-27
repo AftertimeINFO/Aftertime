@@ -1,2 +1,4 @@
+0.2.1
+ - fix docker deployment
 0.2.0
  - append healh check db on compose up

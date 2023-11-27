@@ -39,7 +39,8 @@ services:
   app:
     container_name: core
     build: 
-      dockerfile: ./core/backend/aftertime_core_back
+      context: ./core/backend/aftertime_core_back
+      dockerfile: Dockerfile
     restart: always
     networks:
       back:

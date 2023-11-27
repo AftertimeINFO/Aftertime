@@ -5,7 +5,7 @@
 
 ### Clone project
 ```
-https://github.com/AftertimeINFO/aftertime_prod.git
+git clone https://github.com/AftertimeINFO/aftertime_prod.git
 ```
 
 ### Load submodules
@@ -15,6 +15,17 @@ git submodule init
 git submodule update
 ```
 
+### Initialize environment variables
+#### Windows
 ```
 copy .env.prod .env
+```
+#### Ubuntu
+```
+cp .env.prod .env
+```
+
+### Docker deploy
+```
+docker compose up -d
 ```
