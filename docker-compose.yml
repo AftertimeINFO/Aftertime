@@ -1,33 +1,6 @@
 version: '3.8'
     
 services:
-  front_map:
-    container_name: front_map
-    build: ./Frontend/AftertimeMAP
-    restart: always
-    networks:
-      back:
-        ipv4_address: 172.16.238.11
-      default:
-    ports:
-      - 3000:3000
-  demo:
-    container_name: demo_django
-    build: ./Demo/react-demo
-    restart: always
-    networks:
-      back:
-        ipv4_address: 172.16.238.10
-  app:
-    container_name: core
-    build: ./Backend/AftertimeBalance_backend
-    restart: always
-    networks:
-      back:
-        ipv4_address: 172.16.238.20
-      default:
-    environment:
-      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
   db:
     container_name: db-general
     image: postgres:15.2
@@ -37,13 +10,41 @@ services:
       POSTGRES_PASSWORD: aftertime
       POSTGRES_DB: aftertime
     volumes:
-      - ./server/pgdata:/var/lib/postgresql/data
+      - ./core/infrastructure/postgress/pgdata:/var/lib/postgresql/data
     networks:
       back:
         ipv4_address: 172.16.238.200
       default:
     ports:
       - 5532:5432
+  front_map:
+    container_name: front_map
+    build:
+      context: ./core/frontend/aftertime_vessile_front
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_SERVER_FRONT=$REACT_APP_API_SERVER_FRONT
+    restart: always
+    networks:
+      back:
+        ipv4_address: 172.16.238.11
+      default:
+    ports:
+      - 3000:3000
+  app:
+    container_name: core
+    build: 
+      dockerfile: ./core/backend/aftertime_core_back
+    restart: always
+    networks:
+      back:
+        ipv4_address: 172.16.238.20
+      default:
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
+    depends_on:
+      db:
+        condition: service_healthy
   nginx:
     image: 'jc21/nginx-proxy-manager:latest'
     restart: unless-stopped
@@ -56,8 +57,8 @@ services:
         ipv4_address: 172.16.238.4
       default:
     volumes:
-      - ./nginx_manager/data:/data
-      - ./nginx_manager/letsencrypt:/etc/letsencrypt
+      - ./core/infrastructure/nginx_manager/data:/data
+      - ./core/infrastructure/nginx_manager/letsencrypt:/etc/letsencrypt
 
 networks:
   back:
