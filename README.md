@@ -3,8 +3,15 @@
 
 # Deployment
 
+### Clone project
 ```
-??? geit submodule init
+https://github.com/AftertimeINFO/aftertime_prod.git
+```
+
+### Load submodules
+```
+cd aftertime_prod
+git submodule init
 git submodule update
 ```
 
