@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 0.3.0
  - update core backend
  - update front vessiles
  - uddate balance
+=======
+0.2.1
+ - fix docker deployment
+>>>>>>> 2dbb437ed9de67636f221d33f11bf83b1a5b0f47
 0.2.0
  - append healh check db on compose up
