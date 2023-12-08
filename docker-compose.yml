@@ -25,7 +25,7 @@ services:
   front_balance:
     container_name: front_balance
     build:
-      context: ./core/frontend/aftertime_balance
+      context: ./core/frontend/aftertime_balance_front
       dockerfile: Dockerfile
       args:
         - REACT_APP_API_SERVER_FRONT=$REACT_APP_API_SERVER_FRONT
