@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aftertime-platform"
+version = "0.1.0"
+description = "Physical world model, simulation and planning API"
+requires-python = ">=3.13"
+dependencies = [
+  "alembic==1.16.5",
+  "fastapi==0.116.1",
+  "httpx==0.28.1",
+  "psycopg[binary]==3.2.10",
+  "pydantic-settings==2.10.1",
+  "redis==6.4.0",
+  "sqlalchemy==2.0.43",
+  "uvicorn[standard]==0.35.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.4.2",
+  "pytest-cov==6.2.1",
+  "ruff==0.12.11",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
