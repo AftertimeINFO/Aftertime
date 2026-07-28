@@ -36,6 +36,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .sidebar nav button:hover { color: var(--ink); background: rgba(255,255,255,.03); }
 .sidebar nav button.active { color: var(--signal); background: var(--signal-soft); }
 .nav-icon { width: 20px; text-align: center; font-size: 18px; }
+.product-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 0 0 18px; background: #06100d; border: 1px solid var(--line); border-radius: 9px; }
+.product-switch button { border: 0; background: transparent; color: var(--muted); padding: 8px 4px; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.product-switch button.active { color: #102000; background: var(--signal); }
 .sidebar-foot { margin-top: auto; padding: 14px 10px 0; border-top: 1px solid var(--line); display: flex; gap: 10px; align-items: center; font-size: 11px; }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 12px var(--signal); }
 
@@ -144,6 +147,57 @@ select, input { color: var(--ink); background: #0b1713; border: 1px solid var(--
 .tiny-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 .form-actions { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 18px; display: flex; justify-content: flex-end; gap: 10px; }
 
+.vessel-workspace { height: calc(100vh - 100px); min-height: 620px; display: grid; grid-template-columns: minmax(340px, 39%) minmax(0, 1fr); overflow: hidden; }
+.vessel-rail { background: var(--bg); border-right: 1px solid var(--line); overflow-y: auto; }
+.vessel-tools { padding: 20px; display: grid; grid-template-columns: 1fr 150px; gap: 10px; border-bottom: 1px solid var(--line); }
+.search-field { position: relative; display: flex; align-items: center; }
+.search-field > span:not(.sr-only) { position: absolute; left: 12px; color: var(--muted); z-index: 1; }
+.search-field input { width: 100%; padding-left: 34px; }
+.vessel-summary { display: grid; grid-template-columns: 1fr 1.4fr; border-bottom: 1px solid var(--line); }
+.vessel-summary span { padding: 16px 20px; border-right: 1px solid var(--line); }
+.vessel-summary span:last-child { border: 0; }
+.vessel-summary b, .vessel-summary small { display: block; }
+.vessel-summary b { font: 500 17px var(--font-display), sans-serif; }
+.vessel-summary small { color: var(--muted); font-size: 9px; margin-top: 3px; }
+.vessel-list { display: grid; }
+.vessel-list > button { position: relative; border: 0; border-bottom: 1px solid var(--line); background: transparent; display: grid; grid-template-columns: 38px 1fr 120px 8px; gap: 10px; align-items: center; padding: 16px 20px; text-align: left; cursor: pointer; }
+.vessel-list > button:hover, .vessel-list > button.selected { background: rgba(255,255,255,.025); }
+.vessel-list > button.selected { box-shadow: inset 2px 0 var(--signal); }
+.ship-glyph { width: 34px; height: 34px; display: grid; place-items: center; color: var(--cyan); border: 1px solid rgba(86,221,210,.25); border-radius: 50%; font-size: 19px; }
+.ship-main b, .ship-main small, .ship-cargo b, .ship-cargo small { display: block; }
+.ship-main b { font-size: 12px; }
+.ship-main small, .ship-cargo small { color: var(--muted); font-size: 9px; margin-top: 3px; }
+.ship-cargo { text-align: right; }
+.ship-cargo b { font-size: 10px; }
+.vessel-list button > i { width: 6px; height: 6px; background: var(--amber); border-radius: 50%; }
+.vessel-list button > i.moving { background: var(--signal); box-shadow: 0 0 9px var(--signal); }
+.empty-state { color: var(--muted); text-align: center; padding: 50px 20px; font-size: 12px; }
+.sea-map { position: relative; overflow: hidden; background: #0a1a1a; }
+.map-tiles { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; filter: saturate(.15) brightness(.45) contrast(1.25); transform: scale(1.18); }
+.map-tiles img { width: 100%; height: 100%; object-fit: cover; image-rendering: auto; }
+.map-wash { position: absolute; inset: 0; background: rgba(5,18,15,.28); }
+.map-grid { position: absolute; inset: 0; opacity: .12; background-image: linear-gradient(var(--signal) 1px, transparent 1px), linear-gradient(90deg, var(--signal) 1px, transparent 1px); background-size: 80px 80px; }
+.map-marker { position: absolute; transform: translate(-50%, -50%); border: 0; background: none; color: var(--signal); cursor: pointer; z-index: 2; }
+.map-marker > span { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--signal); background: var(--bg); border-radius: 50%; font-size: 8px; box-shadow: 0 0 0 5px rgba(183,243,74,.07), 0 0 18px rgba(183,243,74,.35); }
+.map-marker.selected > span { color: #102000; background: var(--signal); box-shadow: 0 0 0 8px rgba(183,243,74,.12), 0 0 26px rgba(183,243,74,.55); }
+.map-marker > b { position: absolute; white-space: nowrap; top: 30px; left: 50%; transform: translateX(-50%); padding: 5px 8px; background: var(--bg); border: 1px solid var(--line); font-size: 9px; }
+.map-legend { position: absolute; left: 20px; bottom: 18px; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: rgba(7,16,13,.88); border: 1px solid var(--line); font-size: 9px; }
+.map-legend i { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); }
+.map-legend small { color: var(--muted); margin-left: 12px; }
+.vessel-card { position: absolute; top: 20px; right: 20px; z-index: 3; width: min(320px, calc(100% - 40px)); background: rgba(7,16,13,.94); border: 1px solid var(--line); padding: 20px; backdrop-filter: blur(10px); }
+.vessel-card-head { display: flex; gap: 13px; align-items: center; }
+.ship-glyph.large { width: 46px; height: 46px; flex: 0 0 auto; }
+.vessel-card-head .section-label { margin-bottom: 3px; }
+.vessel-card-head h2 { margin: 0; }
+.vessel-card-head small { color: var(--muted); font-size: 9px; }
+.route-line { display: flex; align-items: center; gap: 8px; margin: 18px 0; color: var(--signal); font-size: 10px; }
+.route-line i { width: 22px; height: 1px; background: var(--signal); }
+.vessel-card dl { margin: 0 0 18px; }
+.vessel-card dl div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.vessel-card dt { color: var(--muted); font-size: 9px; }
+.vessel-card dd { margin: 0; font-size: 10px; font-weight: 700; text-align: right; }
+.vessel-card .primary-button { width: 100%; }
+
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 76px minmax(0,1fr); }
   .sidebar { padding-inline: 10px; }
@@ -155,6 +209,12 @@ select, input { color: var(--ink); background: #0b1713; border: 1px solid var(--
   .stats-grid article:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .split-content, .inventory-layout { grid-template-columns: 1fr; }
   .detail-panel, .inventory-intro { position: static; }
+  .vessel-workspace { grid-template-columns: 300px minmax(0, 1fr); }
+  .vessel-tools { grid-template-columns: 1fr; }
+  .vessel-summary { grid-template-columns: 1fr; }
+  .vessel-summary span { border-right: 0; border-bottom: 1px solid var(--line); }
+  .vessel-list > button { grid-template-columns: 38px 1fr 8px; }
+  .ship-cargo { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -179,4 +239,14 @@ select, input { color: var(--ink); background: #0b1713; border: 1px solid var(--
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .wide { grid-column: auto; }
   .inventory-lines .table-row { grid-template-columns: 1fr 110px 30px; }
+  .product-switch { display: flex; margin: 0; min-width: 140px; }
+  .product-switch button { flex: 1; }
+  .vessel-workspace { height: auto; min-height: 0; display: block; overflow: visible; }
+  .vessel-rail { max-height: 430px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .vessel-tools { grid-template-columns: 1fr 120px; padding: 14px; }
+  .vessel-summary { grid-template-columns: 1fr 1.4fr; }
+  .vessel-summary span { border-right: 1px solid var(--line); border-bottom: 0; padding: 12px 14px; }
+  .sea-map { min-height: 650px; }
+  .vessel-card { top: auto; bottom: 55px; }
+  .map-legend { bottom: 12px; }
 }

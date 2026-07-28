@@ -12,13 +12,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "ORB · Social Resource Planing",
     description: "Планетарный учёт материи и её трансформаций.",
-    images: [{ url: "/og.png", width: 1746, height: 907, alt: "ORB — планетарный учёт материи" }],
+    images: [{ url: "/og-v2.png", width: 1746, height: 907, alt: "ORB — баланс матерії та географія матеріальних потоків" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "ORB · Social Resource Planing",
     description: "Планетарный учёт материи и её трансформаций.",
-    images: ["/og.png"],
+    images: ["/og-v2.png"],
   },
 };
 

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 type View = "balance" | "matter" | "transformations" | "inventory";
+type Product = "balance" | "vessel";
 
 const matter = [
   { name: "Вода", code: "H₂O", opening: 18500, inflow: 420, outflow: 540, tone: "cyan" },
@@ -20,15 +21,27 @@ const transforms = [
   { id: "TR-0039", date: "14 июл", scheme: "Термообработка", input: 96, output: 94.8, status: "Требует проверки" },
 ];
 
+const vessels = [
+  { id: 1, name: "Aurelia", imo: "IMO 9321483", flag: "MT", type: "Bulk carrier", lat: 37.8, lon: 23.6, cargo: "Iron ore", mass: 84200, speed: 12.4, x: 54, y: 42, status: "Underway" },
+  { id: 2, name: "Nordic Cedar", imo: "IMO 9782144", flag: "NO", type: "Container ship", lat: 51.9, lon: 3.7, cargo: "Mixed cargo", mass: 63740, speed: 8.7, x: 48, y: 29, status: "Approaching port" },
+  { id: 3, name: "Sakura Bay", imo: "IMO 9618707", flag: "JP", type: "Tanker", lat: 34.5, lon: 139.7, cargo: "Crude oil", mass: 119500, speed: 14.1, x: 86, y: 44, status: "Underway" },
+  { id: 4, name: "Andes Spirit", imo: "IMO 9456317", flag: "PA", type: "Bulk carrier", lat: -33.4, lon: -71.6, cargo: "Copper concentrate", mass: 71120, speed: 10.2, x: 20, y: 74, status: "Underway" },
+  { id: 5, name: "Baltic Horizon", imo: "IMO 9873022", flag: "FI", type: "LNG carrier", lat: 59.4, lon: 24.8, cargo: "Natural gas", mass: 92800, speed: 0, x: 55, y: 21, status: "At anchor" },
+];
+
 const format = (value: number) =>
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
 
 export default function Home() {
+  const [product, setProduct] = useState<Product>("balance");
   const [view, setView] = useState<View>("balance");
   const [model, setModel] = useState("Фактическая модель");
   const [range, setRange] = useState("Июль 2026");
   const [selectedMatter, setSelectedMatter] = useState("Вода");
   const [transformAmount, setTransformAmount] = useState(120);
+  const [selectedVesselId, setSelectedVesselId] = useState(1);
+  const [vesselQuery, setVesselQuery] = useState("");
+  const [vesselType, setVesselType] = useState("All types");
 
   const total = useMemo(
     () => matter.reduce((sum, item) => sum + item.opening + item.inflow - item.outflow, 0),
@@ -44,6 +57,11 @@ export default function Home() {
       return `${x},${y}`;
     })
     .join(" ");
+  const filteredVessels = vessels.filter((vessel) => {
+    const queryMatch = `${vessel.name} ${vessel.imo} ${vessel.cargo}`.toLowerCase().includes(vesselQuery.toLowerCase());
+    return queryMatch && (vesselType === "All types" || vessel.type === vesselType);
+  });
+  const selectedVessel = vessels.find((vessel) => vessel.id === selectedVesselId) ?? vessels[0];
 
   const navigate = (next: View) => setView(next);
 
@@ -55,7 +73,12 @@ export default function Home() {
           <span><b>ORB</b><small>Social Resource Planing</small></span>
         </button>
 
-        <nav aria-label="Основная навигация">
+        <div className="product-switch" aria-label="Прототип">
+          <button className={product === "balance" ? "active" : ""} onClick={() => setProduct("balance")}>Balance</button>
+          <button className={product === "vessel" ? "active" : ""} onClick={() => setProduct("vessel")}>Vessel</button>
+        </div>
+
+        {product === "balance" ? <nav aria-label="Основная навигация">
           <button className={view === "balance" ? "active" : ""} onClick={() => navigate("balance")}>
             <span className="nav-icon">◫</span> Баланс
           </button>
@@ -68,7 +91,11 @@ export default function Home() {
           <button className={view === "inventory" ? "active" : ""} onClick={() => navigate("inventory")}>
             <span className="nav-icon">⌗</span> Инвентаризация
           </button>
-        </nav>
+        </nav> : <nav aria-label="Навигация судов">
+          <button className="active"><span className="nav-icon">⌖</span> Карта судов</button>
+          <button><span className="nav-icon">◎</span> Грузы</button>
+          <button><span className="nav-icon">≋</span> Потоки</button>
+        </nav>}
 
         <div className="sidebar-foot">
           <span className="pulse" />
@@ -79,23 +106,95 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">ПЛАНЕТАРНЫЙ УЧЁТ МАТЕРИИ</p>
-            <h1>{view === "balance" ? "Физический баланс" : view === "matter" ? "Реестр веществ" : view === "transformations" ? "Трансформации" : "Инвентаризация"}</h1>
+            <p className="eyebrow">{product === "balance" ? "ПЛАНЕТАРНЫЙ УЧЁТ МАТЕРИИ" : "ГЕОГРАФІЯ МАТЕРІАЛЬНИХ ПОТОКІВ"}</p>
+            <h1>{product === "vessel" ? "Судна та вантажі" : view === "balance" ? "Физический баланс" : view === "matter" ? "Реестр веществ" : view === "transformations" ? "Трансформации" : "Инвентаризация"}</h1>
           </div>
           <div className="top-actions">
-            <label>
+            {product === "balance" && <label>
               <span className="sr-only">Модель данных</span>
               <select value={model} onChange={(event) => setModel(event.target.value)}>
                 <option>Фактическая модель</option>
                 <option>Прогнозная модель</option>
                 <option>Исследовательская модель</option>
               </select>
-            </label>
+            </label>}
             <button className="avatar" aria-label="Профиль пользователя">AK</button>
           </div>
         </header>
 
-        {view === "balance" && (
+        {product === "vessel" && (
+          <div className="vessel-workspace">
+            <section className="vessel-rail">
+              <div className="vessel-tools">
+                <label className="search-field">
+                  <span className="sr-only">Пошук судна</span>
+                  <span>⌕</span>
+                  <input value={vesselQuery} onChange={(event) => setVesselQuery(event.target.value)} placeholder="Назва, IMO або вантаж" />
+                </label>
+                <select value={vesselType} onChange={(event) => setVesselType(event.target.value)}>
+                  <option>All types</option>
+                  <option>Bulk carrier</option>
+                  <option>Container ship</option>
+                  <option>Tanker</option>
+                  <option>LNG carrier</option>
+                </select>
+              </div>
+              <div className="vessel-summary">
+                <span><b>{filteredVessels.length}</b><small>суден у вибірці</small></span>
+                <span><b>{format(filteredVessels.reduce((sum, vessel) => sum + vessel.mass, 0))} т</b><small>відстежуваного вантажу</small></span>
+              </div>
+              <div className="vessel-list">
+                {filteredVessels.map((vessel) => (
+                  <button key={vessel.id} className={selectedVesselId === vessel.id ? "selected" : ""} onClick={() => setSelectedVesselId(vessel.id)}>
+                    <span className="ship-glyph">⌁</span>
+                    <span className="ship-main"><b>{vessel.name}</b><small>{vessel.flag} · {vessel.type}</small></span>
+                    <span className="ship-cargo"><b>{format(vessel.mass)} т</b><small>{vessel.cargo}</small></span>
+                    <i className={vessel.speed > 0 ? "moving" : ""} />
+                  </button>
+                ))}
+                {filteredVessels.length === 0 && <p className="empty-state">За цими умовами суден не знайдено.</p>}
+              </div>
+            </section>
+
+            <section className="sea-map" aria-label="Інтерактивна карта положення суден">
+              <div className="map-tiles" aria-hidden="true">
+                <img src="https://tile.openstreetmap.org/2/1/1.png" alt="" />
+                <img src="https://tile.openstreetmap.org/2/2/1.png" alt="" />
+                <img src="https://tile.openstreetmap.org/2/1/2.png" alt="" />
+                <img src="https://tile.openstreetmap.org/2/2/2.png" alt="" />
+              </div>
+              <div className="map-wash" />
+              <div className="map-grid" aria-hidden="true" />
+              {vessels.map((vessel) => (
+                <button
+                  key={vessel.id}
+                  className={`map-marker ${selectedVesselId === vessel.id ? "selected" : ""}`}
+                  style={{ left: `${vessel.x}%`, top: `${vessel.y}%` }}
+                  onClick={() => setSelectedVesselId(vessel.id)}
+                  aria-label={`${vessel.name}, ${vessel.cargo}`}
+                >
+                  <span>◆</span>
+                  {selectedVesselId === vessel.id && <b>{vessel.name}</b>}
+                </button>
+              ))}
+              <div className="map-legend"><i /><span>Судно передає позицію</span><small>© OpenStreetMap contributors</small></div>
+              <aside className="vessel-card">
+                <div className="vessel-card-head"><span className="ship-glyph large">⌁</span><span><p className="section-label">ОБРАНЕ СУДНО</p><h2>{selectedVessel.name}</h2><small>{selectedVessel.imo}</small></span></div>
+                <div className="route-line"><i /><span>{selectedVessel.status}</span></div>
+                <dl>
+                  <div><dt>Тип</dt><dd>{selectedVessel.type}</dd></div>
+                  <div><dt>Вантаж</dt><dd>{selectedVessel.cargo}</dd></div>
+                  <div><dt>Маса вантажу</dt><dd>{format(selectedVessel.mass)} т</dd></div>
+                  <div><dt>Швидкість</dt><dd>{format(selectedVessel.speed)} kn</dd></div>
+                  <div><dt>Позиція</dt><dd>{selectedVessel.lat.toFixed(1)}°, {selectedVessel.lon.toFixed(1)}°</dd></div>
+                </dl>
+                <button className="primary-button" onClick={() => setProduct("balance")}>Відкрити матеріальний баланс</button>
+              </aside>
+            </section>
+          </div>
+        )}
+
+        {product === "balance" && view === "balance" && (
           <div className="content">
             <section className="hero-balance">
               <div>
@@ -166,7 +265,7 @@ export default function Home() {
           </div>
         )}
 
-        {view === "matter" && (
+        {product === "balance" && view === "matter" && (
           <div className="content split-content">
             <section className="panel registry">
               <div className="panel-head"><div><h2>Каталог материи</h2><p>4 типа · уровень L1</p></div><button className="primary-button">+ Добавить вещество</button></div>
@@ -198,7 +297,7 @@ export default function Home() {
           </div>
         )}
 
-        {view === "transformations" && (
+        {product === "balance" && view === "transformations" && (
           <div className="content">
             <section className="transform-hero">
               <div><p className="section-label">ПРОВЕРКА СОХРАНЕНИЯ</p><h2>Каждый процесс должен сходиться.</h2><p>ORB записывает расход исходных компонентов и приход результатов в единый регистр материи.</p></div>
@@ -232,7 +331,7 @@ export default function Home() {
           </div>
         )}
 
-        {view === "inventory" && (
+        {product === "balance" && view === "inventory" && (
           <div className="content inventory-layout">
             <section className="inventory-intro">
               <p className="section-label">ТОЧКА ОТСЧЁТА</p>
