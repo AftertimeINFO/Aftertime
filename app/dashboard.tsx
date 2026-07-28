@@ -2,14 +2,16 @@
 
 import { useMemo, useState } from "react";
 import type { WorldSnapshot } from "../db/world";
+import { baseCircuitInputs, simulateAmmoniaCircuit } from "../db/simulator";
 
-type View = "overview" | "network" | "ledger" | "scenarios" | "sources";
+type View = "overview" | "network" | "ledger" | "lab" | "scenarios" | "sources";
 type Row = Record<string, string | number | null>;
 
 const labels: Record<View, string> = {
   overview: "Состояние",
   network: "Сеть возможностей",
   ledger: "Журнал",
+  lab: "Лаборатория",
   scenarios: "Будущее",
   sources: "Доказательства",
 };
@@ -18,6 +20,7 @@ const icons: Record<View, string> = {
   overview: "◉",
   network: "⌘",
   ledger: "≡",
+  lab: "⚗",
   scenarios: "⌁",
   sources: "◎",
 };
@@ -30,6 +33,9 @@ const percent = (value: unknown) => `${Math.round(n(value) * 100)}%`;
 export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
   const [view, setView] = useState<View>("overview");
   const [scenarioId, setScenarioId] = useState("scenario-base");
+  const [targetKg, setTargetKg] = useState(1000);
+  const [gasOverride, setGasOverride] = useState<number | null>(null);
+  const [logisticsOverride, setLogisticsOverride] = useState<number | null>(null);
 
   const scenario = snapshot.scenarios.find((item) => item.id === scenarioId) ?? snapshot.scenarios[0];
   const run = snapshot.runs.find((item) => item.scenario_id === scenario?.id) ?? snapshot.runs[0];
@@ -37,7 +43,7 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
   const bottleneck = Math.min(
     n(scenario?.gas_availability),
     n(scenario?.grid_availability),
-    n(scenario?.rail_availability),
+    n(scenario?.logistics_availability),
     n(scenario?.workforce_availability),
   );
   const liveForecast = Math.round(capacity * 365 * bottleneck);
@@ -54,9 +60,19 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
     if (view === "overview") return "Азотный контур Украины";
     if (view === "network") return "Причинная сеть производства";
     if (view === "ledger") return "Трансформации материи и энергии";
+    if (view === "lab") return "Контур одной тонны аммиака";
     if (view === "scenarios") return "Прогноз будущих состояний";
     return "Происхождение данных";
   }, [view]);
+
+  const circuit = useMemo(() => simulateAmmoniaCircuit({
+    ...baseCircuitInputs,
+    targetDeliveredKg: targetKg,
+    gasAvailability: gasOverride ?? n(scenario?.gas_availability),
+    gridAvailability: n(scenario?.grid_availability),
+    logisticsAvailability: logisticsOverride ?? n(scenario?.logistics_availability),
+    workforceAvailability: n(scenario?.workforce_availability),
+  }), [targetKg, gasOverride, logisticsOverride, scenario]);
 
   return (
     <main className="app-shell">
@@ -165,6 +181,69 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
           </div>
         )}
 
+        {view === "lab" && (
+          <div className="content">
+            <section className="lab-hero">
+              <div>
+                <p className="section-label">TEST CIRCUIT T0–T7 · {circuit.modelVersion}</p>
+                <h2>Произвести и доставить <strong>{fmt(targetKg)} кг</strong> аммиака</h2>
+                <p>Расчёт проходит от N₂ и H₂ через синтез, резервуар и транспорт до регионального склада. Все потери, ограничения и допуски остаются видимыми.</p>
+              </div>
+              <div className={`lab-verdict ${circuit.shortfallKg > 0.5 ? "limited" : ""}`}>
+                <small>ДОСТИЖИМО В СЦЕНАРИИ</small>
+                <b>{fmt(circuit.achievableDeliveredKg)} кг</b>
+                <span>{circuit.shortfallKg > 0.5 ? `дефицит ${fmt(circuit.shortfallKg)} кг` : "цель закрыта"}</span>
+              </div>
+            </section>
+
+            <section className="panel lab-controls">
+              <label>Целевая партия <b>{fmt(targetKg)} кг</b><input type="range" min="100" max="5000" step="100" value={targetKg} onChange={(event) => setTargetKg(Number(event.target.value))} /></label>
+              <label>Доступность газа <b>{percent(gasOverride ?? scenario?.gas_availability)}</b><input type="range" min="0.1" max="1" step="0.01" value={gasOverride ?? n(scenario?.gas_availability)} onChange={(event) => setGasOverride(Number(event.target.value))} /></label>
+              <label>Доступность доставки <b>{percent(logisticsOverride ?? scenario?.logistics_availability)}</b><input type="range" min="0.1" max="1" step="0.01" value={logisticsOverride ?? n(scenario?.logistics_availability)} onChange={(event) => setLogisticsOverride(Number(event.target.value))} /></label>
+              <button className="secondary-button" onClick={() => { setGasOverride(null); setLogisticsOverride(null); }}>Вернуть сценарий</button>
+            </section>
+
+            <section className="circuit-flow">
+              <CircuitNode phase="01 · СЫРЬЁ" title="N₂ + H₂" value={`${fmt(circuit.inputs.nitrogenKg)} + ${fmt(circuit.inputs.hydrogenKg)} кг`} note={`${circuit.inputs.naturalGasGJ} GJ газа · ${circuit.inputs.waterKg} кг воды`} />
+              <span>→</span>
+              <CircuitNode phase="02 · СИНТЕЗ" title="Линия NH₃" value={`${fmt(circuit.outputs.grossAmmoniaKg)} кг`} note={`выход процесса ${percent(baseCircuitInputs.processYield)}`} />
+              <span>→</span>
+              <CircuitNode phase="03 · ХРАНЕНИЕ" title="Резервуар R-01" value={`−${circuit.outputs.storageLossKg} кг`} note="технологические потери 0,2%" />
+              <span>→</span>
+              <CircuitNode phase="04 · ДОСТАВКА" title="Черкассы → Полтава" value={`−${circuit.outputs.transitLossKg} кг`} note={`${circuit.expectedHours} ч с учётом задержки`} />
+              <span>→</span>
+              <CircuitNode phase="05 · РЕЗУЛЬТАТ" title="Региональный склад" value={`${fmt(circuit.outputs.deliveredKg)} кг`} note={`${fmt(circuit.lowerKg)}–${fmt(circuit.upperKg)} кг`} good={circuit.shortfallKg < 0.5} />
+            </section>
+
+            <section className="lab-grid">
+              <article className="panel conservation-card">
+                <div className="panel-head"><div><h2>Физическая сверка</h2><p>Атомарный уровень после масштабирования доступностью.</p></div><span className="status-good">{circuit.conservation.closed ? "ЗАКРЫТО" : "РАСХОЖДЕНИЕ"}</span></div>
+                <BalanceLine label="Азот" input={circuit.conservation.nitrogenInKg} output={circuit.conservation.nitrogenOutKg} />
+                <BalanceLine label="Водород" input={circuit.conservation.hydrogenInKg} output={circuit.conservation.hydrogenOutKg} />
+                <footer>Ошибка баланса: <b>{circuit.conservation.errorKg} кг</b></footer>
+              </article>
+              <article className="panel plan-card">
+                <p className="section-label">КОМПЕНСИРУЮЩИЙ ПЛАН</p>
+                <h2>{circuit.recommendation.action}</h2>
+                <p>{circuit.recommendation.effect}. Узкое место: <b>{bottleneckLabel(circuit.bottleneck)}</b>.</p>
+                <div><span>Срок включения</span><b>{circuit.recommendation.leadTimeHours} ч</b></div>
+                <div><span>Восстановленный объём</span><b>+{fmt(Math.max(0, circuit.recommendation.recoveredKg))} кг</b></div>
+                <div><span>После вмешательства</span><b>{fmt(circuit.recommendation.compensatedDeliveredKg)} кг</b></div>
+              </article>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head"><div><h2>Данные контура</h2><p>Процессы, партии и маршруты загружены из D1, а расчёт выполняется воспроизводимой версией модели.</p></div><span className="tag">{snapshot.processFlows.length} потоков</span></div>
+              <div className="lab-data">
+                <span><b>{snapshot.processModels.length}</b><small>модель процесса</small></span>
+                <span><b>{snapshot.inventoryLots.length}</b><small>прослеживаемая партия</small></span>
+                <span><b>{snapshot.transportRoutes.length}</b><small>маршрута</small></span>
+                <span><b>{percent(circuit.confidence)}</b><small>доверие расчёта</small></span>
+              </div>
+            </section>
+          </div>
+        )}
+
         {view === "scenarios" && (
           <div className="content">
             <section className="forecast-hero">
@@ -219,4 +298,21 @@ function Node({ title, subtitle }: { title: string; subtitle: string }) {
 
 function Meter({ label, value }: { label: string; value: unknown }) {
   return <article><span><b>{label}</b><strong>{percent(value)}</strong></span><i><em style={{ width: percent(value) }} /></i></article>;
+}
+
+function CircuitNode({ phase, title, value, note, good = false }: { phase: string; title: string; value: string; note: string; good?: boolean }) {
+  return <article className={`circuit-node ${good ? "complete" : ""}`}><small>{phase}</small><h3>{title}</h3><b>{value}</b><p>{note}</p></article>;
+}
+
+function BalanceLine({ label, input, output }: { label: string; input: number; output: number }) {
+  return <div className="balance-line"><b>{label}</b><span>Вход {input} кг</span><i>→</i><span>Выход {output} кг</span><strong>{Math.abs(input - output) < 0.001 ? "✓" : "!"}</strong></div>;
+}
+
+function bottleneckLabel(value: string) {
+  return ({
+    gas: "газоснабжение",
+    grid: "электроснабжение",
+    logistics: "доставка",
+    workforce: "персонал",
+  } as Record<string, string>)[value] ?? value;
 }

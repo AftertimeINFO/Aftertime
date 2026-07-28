@@ -148,3 +148,80 @@ export const modelRuns = sqliteTable("model_runs", {
   confidence: real("confidence").notNull(),
   limitingFactor: text("limiting_factor").notNull(),
 });
+
+export const processModels = sqliteTable("process_models", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  action: text("action").notNull(),
+  ownerEntityId: text("owner_entity_id").notNull(),
+  modelVersion: text("model_version").notNull(),
+  durationHours: real("duration_hours").notNull(),
+  yieldFactor: real("yield_factor").notNull(),
+  validFrom: text("valid_from").notNull(),
+  sourceId: text("source_id").notNull(),
+});
+
+export const processFlows = sqliteTable("process_flows", {
+  id: text("id").primaryKey(),
+  processId: text("process_id").notNull(),
+  entityId: text("entity_id").notNull(),
+  direction: text("direction").notNull(),
+  role: text("role").notNull(),
+  amountPerUnit: real("amount_per_unit").notNull(),
+  unit: text("unit").notNull(),
+  uncertainty: real("uncertainty").notNull().default(0),
+});
+
+export const inventoryLots = sqliteTable("inventory_lots", {
+  id: text("id").primaryKey(),
+  entityId: text("entity_id").notNull(),
+  containerEntityId: text("container_entity_id").notNull(),
+  ownerEntityId: text("owner_entity_id").notNull(),
+  quantity: real("quantity").notNull(),
+  unit: text("unit").notNull(),
+  qualityStatus: text("quality_status").notNull(),
+  observedAt: text("observed_at").notNull(),
+  sourceId: text("source_id").notNull(),
+});
+
+export const transportRoutes = sqliteTable("transport_routes", {
+  id: text("id").primaryKey(),
+  originEntityId: text("origin_entity_id").notNull(),
+  destinationEntityId: text("destination_entity_id").notNull(),
+  mode: text("mode").notNull(),
+  distanceKm: real("distance_km").notNull(),
+  capacityPerDay: real("capacity_per_day").notNull(),
+  capacityUnit: text("capacity_unit").notNull(),
+  durationHours: real("duration_hours").notNull(),
+  availability: real("availability").notNull(),
+  lossFactor: real("loss_factor").notNull(),
+  recoveryHours: real("recovery_hours").notNull(),
+});
+
+export const circuitRuns = sqliteTable("circuit_runs", {
+  id: text("id").primaryKey(),
+  scenarioId: text("scenario_id").notNull(),
+  modelVersion: text("model_version").notNull(),
+  targetQuantity: real("target_quantity").notNull(),
+  deliveredQuantity: real("delivered_quantity").notNull(),
+  lowerQuantity: real("lower_quantity").notNull(),
+  upperQuantity: real("upper_quantity").notNull(),
+  unit: text("unit").notNull(),
+  bottleneck: text("bottleneck").notNull(),
+  confidence: real("confidence").notNull(),
+  expectedHours: real("expected_hours").notNull(),
+  conservationError: real("conservation_error").notNull(),
+  runAt: text("run_at").notNull(),
+});
+
+export const interventions = sqliteTable("interventions", {
+  id: text("id").primaryKey(),
+  circuitRunId: text("circuit_run_id").notNull(),
+  action: text("action").notNull(),
+  targetEntityId: text("target_entity_id").notNull(),
+  leadTimeHours: real("lead_time_hours").notNull(),
+  recoveredQuantity: real("recovered_quantity").notNull(),
+  unit: text("unit").notNull(),
+  status: text("status").notNull(),
+  rationale: text("rationale").notNull(),
+});

@@ -12,13 +12,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "ORB · Nitrogen World Model",
     description: "От азота и энергии до производства, логистики и урожая.",
-    images: [{ url: "/og-v2.png", width: 1746, height: 907, alt: "ORB — модель материи, производства и инфраструктуры" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "ORB · Nitrogen World Model",
     description: "От азота и энергии до производства, логистики и урожая.",
-    images: ["/og-v2.png"],
   },
 };
 

@@ -61,6 +61,39 @@ const schemaStatements = [
     expected_output REAL NOT NULL, low_output REAL NOT NULL, high_output REAL NOT NULL,
     unit TEXT NOT NULL, confidence REAL NOT NULL, limiting_factor TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS process_models (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, action TEXT NOT NULL, owner_entity_id TEXT NOT NULL,
+    model_version TEXT NOT NULL, duration_hours REAL NOT NULL, yield_factor REAL NOT NULL,
+    valid_from TEXT NOT NULL, source_id TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS process_flows (
+    id TEXT PRIMARY KEY, process_id TEXT NOT NULL, entity_id TEXT NOT NULL, direction TEXT NOT NULL,
+    role TEXT NOT NULL, amount_per_unit REAL NOT NULL, unit TEXT NOT NULL, uncertainty REAL NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS inventory_lots (
+    id TEXT PRIMARY KEY, entity_id TEXT NOT NULL, container_entity_id TEXT NOT NULL,
+    owner_entity_id TEXT NOT NULL, quantity REAL NOT NULL, unit TEXT NOT NULL,
+    quality_status TEXT NOT NULL, observed_at TEXT NOT NULL, source_id TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS transport_routes (
+    id TEXT PRIMARY KEY, origin_entity_id TEXT NOT NULL, destination_entity_id TEXT NOT NULL,
+    mode TEXT NOT NULL, distance_km REAL NOT NULL, capacity_per_day REAL NOT NULL,
+    capacity_unit TEXT NOT NULL, duration_hours REAL NOT NULL, availability REAL NOT NULL,
+    loss_factor REAL NOT NULL, recovery_hours REAL NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS circuit_runs (
+    id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, model_version TEXT NOT NULL,
+    target_quantity REAL NOT NULL, delivered_quantity REAL NOT NULL,
+    lower_quantity REAL NOT NULL, upper_quantity REAL NOT NULL, unit TEXT NOT NULL,
+    bottleneck TEXT NOT NULL, confidence REAL NOT NULL, expected_hours REAL NOT NULL,
+    conservation_error REAL NOT NULL, run_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS interventions (
+    id TEXT PRIMARY KEY, circuit_run_id TEXT NOT NULL, action TEXT NOT NULL,
+    target_entity_id TEXT NOT NULL, lead_time_hours REAL NOT NULL,
+    recovered_quantity REAL NOT NULL, unit TEXT NOT NULL, status TEXT NOT NULL,
+    rationale TEXT NOT NULL
+  )`,
 ];
 
 const seedStatements = [
@@ -77,6 +110,10 @@ const seedStatements = [
     ('network-gas','infrastructure','object','Газоснабжение',NULL,'Вход природного газа в производственный контур','UA','2026-01-01',NULL),
     ('network-grid','infrastructure','object','Энергосистема',NULL,'Электроснабжение производственного контура','UA','2026-01-01',NULL),
     ('network-rail','infrastructure','object','Железнодорожная сеть',NULL,'Доставка удобрений в аграрные регионы','UA','2026-01-01',NULL),
+    ('tank-ammonia-1','storage_asset','object','Резервуар аммиака R-01',NULL,'Промежуточное хранение партии аммиака','UA','2026-01-01',NULL),
+    ('rail-tank-1','transport_asset','object','Железнодорожная цистерна C-01',NULL,'Перевозка партии аммиака','UA','2026-01-01',NULL),
+    ('warehouse-poltava','warehouse','object','Полтавский региональный склад',NULL,'Точка доставки тестовой партии','UA','2026-01-01',NULL),
+    ('network-water','infrastructure','object','Промышленное водоснабжение',NULL,'Вода для водородного и парового контура','UA','2026-01-01',NULL),
     ('workforce-ammonia','workforce_pool','agent','Персонал аммиачного производства',NULL,'Агрегированный пул обязательных компетенций','UA','2026-01-01',NULL),
     ('n-atom','atom','atomic','Азот','N','Атомарное представление азота',NULL,NULL,NULL),
     ('h-atom','atom','atomic','Водород','H','Атомарное представление водорода',NULL,NULL,NULL),
@@ -128,6 +165,24 @@ const seedStatements = [
     ('run-base','scenario-base','2026-07-29T00:00:00Z','nitrogen-network-v0.1',294000,246000,341000,'t NH3/year',0.67,'Железнодорожная сеть'),
     ('run-resilient','scenario-resilient','2026-07-29T00:00:00Z','nitrogen-network-v0.1',385000,351000,411000,'t NH3/year',0.81,'Газоснабжение'),
     ('run-stress','scenario-stress','2026-07-29T00:00:00Z','nitrogen-network-v0.1',184000,126000,229000,'t NH3/year',0.52,'Железнодорожная сеть')`,
+  `INSERT OR IGNORE INTO process_models VALUES
+    ('process-ammonia-1t','Синтез и доставка одной тонны аммиака','produce_and_deliver','line-ammonia-1','ammonia-circuit-v0.2',18,0.985,'2026-07-29','src-orb')`,
+  `INSERT OR IGNORE INTO process_flows VALUES
+    ('flow-n2','process-ammonia-1t','n2','input','feedstock',0.823529,'kg/kg NH3',0.005),
+    ('flow-h2','process-ammonia-1t','h2','input','feedstock',0.176471,'kg/kg NH3',0.008),
+    ('flow-gas','process-ammonia-1t','network-gas','input','feedstock_energy',0.028,'GJ/kg NH3',0.12),
+    ('flow-grid','process-ammonia-1t','network-grid','input','electricity',0.0007,'MWh/kg NH3',0.08),
+    ('flow-water','process-ammonia-1t','network-water','input','process_water',1.58,'kg/kg NH3',0.10),
+    ('flow-nh3','process-ammonia-1t','nh3','output','product',1,'kg/kg NH3',0.015)`,
+  `INSERT OR IGNORE INTO inventory_lots VALUES
+    ('lot-nh3-001','nh3','tank-ammonia-1','company-azot',1000,'kg','planned','2026-07-29T08:00:00Z','src-orb')`,
+  `INSERT OR IGNORE INTO transport_routes VALUES
+    ('route-cherkasy-poltava','plant-cherkasy','warehouse-poltava','rail',286,60,'t/day',8,0.90,0.001,24),
+    ('route-cherkasy-poltava-road','plant-cherkasy','warehouse-poltava','road',312,18,'t/day',6.5,0.86,0.002,8)`,
+  `INSERT OR IGNORE INTO circuit_runs VALUES
+    ('circuit-base-001','scenario-stress','ammonia-circuit-v0.2',1000,420,374,466,'kg NH3','logistics',0.637,42.9,0,'2026-07-29T12:00:00Z')`,
+  `INSERT OR IGNORE INTO interventions VALUES
+    ('intervention-road-001','circuit-base-001','Перенаправить партию через автомобильный терминал','route-cherkasy-poltava-road',12,440,'kg NH3','recommended','Автомобильный маршрут восстанавливает доступность доставки с 42% до 86%')`,
 ];
 
 async function ensureDatabase() {
@@ -149,7 +204,7 @@ export type WorldSnapshot = Awaited<ReturnType<typeof getWorldSnapshot>>;
 
 export async function getWorldSnapshot() {
   const db = await ensureDatabase();
-  const [entities, relations, facilities, capabilities, dependencies, events, postings, scenarios, runs, sources, externalIdentities] =
+  const [entities, relations, facilities, capabilities, dependencies, events, postings, scenarios, runs, sources, externalIdentities, processModels, processFlows, inventoryLots, transportRoutes, circuitRuns, interventions] =
     await Promise.all([
       all(db, "SELECT * FROM entities ORDER BY level, name"),
       all(db, "SELECT * FROM relations ORDER BY predicate"),
@@ -165,6 +220,19 @@ export async function getWorldSnapshot() {
       all(db, "SELECT * FROM model_runs ORDER BY expected_output DESC"),
       all(db, "SELECT * FROM sources ORDER BY name"),
       all(db, "SELECT * FROM external_identities ORDER BY namespace"),
+      all(db, "SELECT * FROM process_models ORDER BY id"),
+      all(db, `SELECT f.*, e.name AS entity_name, e.symbol
+        FROM process_flows f JOIN entities e ON e.id = f.entity_id ORDER BY f.direction, f.id`),
+      all(db, `SELECT l.*, e.name AS entity_name, c.name AS container_name
+        FROM inventory_lots l
+        JOIN entities e ON e.id = l.entity_id
+        JOIN entities c ON c.id = l.container_entity_id ORDER BY l.observed_at DESC`),
+      all(db, `SELECT r.*, o.name AS origin_name, d.name AS destination_name
+        FROM transport_routes r
+        JOIN entities o ON o.id = r.origin_entity_id
+        JOIN entities d ON d.id = r.destination_entity_id ORDER BY r.duration_hours`),
+      all(db, "SELECT * FROM circuit_runs ORDER BY run_at DESC"),
+      all(db, "SELECT * FROM interventions ORDER BY id"),
     ]);
 
   return {
@@ -180,5 +248,11 @@ export async function getWorldSnapshot() {
     runs,
     sources,
     externalIdentities,
+    processModels,
+    processFlows,
+    inventoryLots,
+    transportRoutes,
+    circuitRuns,
+    interventions,
   };
 }
