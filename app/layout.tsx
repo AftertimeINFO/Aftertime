@@ -6,18 +6,18 @@ const manrope = Manrope({ variable: "--font-body", subsets: ["latin", "cyrillic"
 const spaceGrotesk = Space_Grotesk({ variable: "--font-display", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ORB · Social Resource Planing",
-  description: "Прототип системы физического учёта материи и её трансформаций.",
+  title: "ORB · Nitrogen World Model",
+  description: "Модель материи, инфраструктуры и организаций для прогнозирования будущих состояний.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
   openGraph: {
-    title: "ORB · Social Resource Planing",
-    description: "Планетарный учёт материи и её трансформаций.",
-    images: [{ url: "/og-v2.png", width: 1746, height: 907, alt: "ORB — баланс матерії та географія матеріальних потоків" }],
+    title: "ORB · Nitrogen World Model",
+    description: "От азота и энергии до производства, логистики и урожая.",
+    images: [{ url: "/og-v2.png", width: 1746, height: 907, alt: "ORB — модель материи, производства и инфраструктуры" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ORB · Social Resource Planing",
-    description: "Планетарный учёт материи и её трансформаций.",
+    title: "ORB · Nitrogen World Model",
+    description: "От азота и энергии до производства, логистики и урожая.",
     images: ["/og-v2.png"],
   },
 };
