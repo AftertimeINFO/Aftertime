@@ -1,0 +1,49 @@
+name: Research or data proposal
+description: Propose a model, dataset, pilot or scientific review.
+title: "[Proposal] "
+labels:
+  - proposal
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping make planetary material and energy accounting verifiable.
+        Distinguish measured evidence, estimates and assumptions.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What should Aftertime understand or make possible?
+    validations:
+      required: true
+  - type: textarea
+    id: relevance
+    attributes:
+      label: Relevance to the mission
+      description: How does this preserve humanity's future options?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and sources
+      description: Link primary sources, standards, datasets or prior work.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed verifiable outcome
+      description: Define a bounded deliverable and how it can be checked.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Uncertainty, legal and ethical constraints
+      description: Include licensing, privacy, safety and known limitations.
+  - type: textarea
+    id: conflicts
+    attributes:
+      label: Relevant interests
+      description: Disclose relevant financial or institutional relationships.
