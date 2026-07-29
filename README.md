@@ -4,9 +4,22 @@
 
 [Українська](README.uk.md) · [Русский](README.ru.md)
 
-Humanity manages companies through financial statements, yet it has no comparable
-system for understanding the physical resources on which civilization depends.
-Aftertime is an open project to build that missing system.
+Humanity manages companies, states and economies through money, securities, laws
+and borders. These systems shape our lives, but they are human-made abstractions:
+they exist because we collectively recognize them.
+
+Beneath them lies a deeper reality that does not depend on our agreements: life,
+matter, energy, space and time. Matter does not recognize national borders.
+Energy does not obey financial statements. The laws of physics cannot be changed
+by political decision, and the physical quantity of a resource cannot be
+increased by assigning it a higher price.
+
+Life is a rare and fragile organization of matter in a universe indifferent to
+our survival. Humanity's future depends on learning to use matter and energy
+carefully, efficiently and with an understanding of the consequences.
+
+Aftertime is an open project to build a planetary accounting system for this
+physical reality.
 
 The project aims to describe:
 
@@ -21,9 +34,10 @@ The project aims to describe:
 
 The governing physical idea is simple: matter does not appear from nowhere or
 vanish. It moves and transforms. Energy also changes form, while some of its
-capacity to perform useful work is lost through dissipation. Economic accounts
-often hide these physical consequences. Aftertime is intended to make them
-visible.
+capacity to perform useful work is lost through dissipation. A financial balance
+shows how society assigns and distributes value. Aftertime should show what
+physically happens to the world as a result. It adds a missing physical layer
+rather than replacing economics.
 
 ## The accounting model
 
