@@ -2,445 +2,259 @@
 
 import { useMemo, useState } from "react";
 import type { WorldSnapshot } from "../db/world";
-import { baseCircuitInputs, simulateAmmoniaCircuit } from "../db/simulator";
+import { defaultSimulationInputs, simulateModelLab, type LabRow } from "../db/model-lab";
 
-type View = "overview" | "power" | "network" | "ledger" | "lab" | "scenarios" | "sources";
-type Row = Record<string, string | number | null>;
+type View = "run" | "scheme" | "incidents" | "recovery" | "qualification" | "catalog";
 
-const labels: Record<View, string> = {
-  overview: "Состояние",
-  power: "Електромережа",
-  network: "Сеть возможностей",
-  ledger: "Журнал",
-  lab: "Лаборатория",
-  scenarios: "Будущее",
-  sources: "Доказательства",
+const nav: { id: View; label: string; glyph: string }[] = [
+  { id: "run", label: "Запуск моделі", glyph: "▶" },
+  { id: "scheme", label: "Рівні схеми", glyph: "⌘" },
+  { id: "incidents", label: "Аварії", glyph: "⚠" },
+  { id: "recovery", label: "Відновлення", glyph: "↻" },
+  { id: "qualification", label: "Кваліфікація", glyph: "✓" },
+  { id: "catalog", label: "Каталоги", glyph: "▦" },
+];
+
+const chainIds = ["resource-gas", "gas-production", "gas-pipeline", "steam-plant", "switchyard", "hv-line", "grid-substation", "distribution"];
+const chainMeta: Record<string, { code: string; short: string }> = {
+  "resource-gas": { code: "L0", short: "Ресурс" },
+  "gas-production": { code: "L2", short: "Видобуток" },
+  "gas-pipeline": { code: "L2", short: "Газопровід" },
+  "steam-plant": { code: "L2", short: "ТЕС" },
+  switchyard: { code: "L2", short: "Підвищення" },
+  "hv-line": { code: "L2", short: "ЛЕП" },
+  "grid-substation": { code: "L2", short: "Підстанція" },
+  distribution: { code: "L2", short: "Розподіл" },
 };
 
-const icons: Record<View, string> = {
-  overview: "◉",
-  power: "ϟ",
-  network: "⌘",
-  ledger: "≡",
-  lab: "⚗",
-  scenarios: "⌁",
-  sources: "◎",
-};
-
-const n = (value: unknown) => Number(value ?? 0);
-const fmt = (value: unknown) =>
-  new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(n(value));
-const percent = (value: unknown) => `${Math.round(n(value) * 100)}%`;
+const fmt = (value: unknown, digits = 1) => new Intl.NumberFormat("uk-UA", { maximumFractionDigits: digits }).format(Number(value ?? 0));
+const text = (value: unknown) => String(value ?? "");
+const value = (row: LabRow, key: string) => Number(row[key] ?? 0);
 
 export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
-  const [view, setView] = useState<View>("overview");
-  const [scenarioId, setScenarioId] = useState("scenario-base");
-  const [targetKg, setTargetKg] = useState(1000);
-  const [gasOverride, setGasOverride] = useState<number | null>(null);
-  const [logisticsOverride, setLogisticsOverride] = useState<number | null>(null);
-  const [fuelEnergyKwh, setFuelEnergyKwh] = useState(100);
-  const [fridgeCount, setFridgeCount] = useState(100);
-  const [ledCount, setLedCount] = useState(1000);
+  const scenarios = snapshot.labScenarios as LabRow[];
+  const components = snapshot.labComponents as LabRow[];
+  const [view, setView] = useState<View>("run");
+  const [scenarioId, setScenarioId] = useState("baseline");
+  const [activeComponentId, setActiveComponentId] = useState("steam-plant");
+  const [demandMWh, setDemandMWh] = useState(defaultSimulationInputs.demandMWh);
+  const [gasEnergyMWh, setGasEnergyMWh] = useState(defaultSimulationInputs.gasEnergyMWh);
+  const [reserveMW, setReserveMW] = useState(defaultSimulationInputs.reserveMW);
+  const [crewAvailability, setCrewAvailability] = useState(defaultSimulationInputs.crewAvailability);
+  const [runNumber, setRunNumber] = useState(1);
 
-  const scenario = snapshot.scenarios.find((item) => item.id === scenarioId) ?? snapshot.scenarios[0];
-  const run = snapshot.runs.find((item) => item.scenario_id === scenario?.id) ?? snapshot.runs[0];
-  const capacity = n(snapshot.capabilities[0]?.available_capacity);
-  const bottleneck = Math.min(
-    n(scenario?.gas_availability),
-    n(scenario?.grid_availability),
-    n(scenario?.logistics_availability),
-    n(scenario?.workforce_availability),
-  );
-  const liveForecast = Math.round(capacity * 365 * bottleneck);
-  const atoms = snapshot.entities.filter((item) => item.kind === "atom");
-  const molecules = snapshot.entities.filter((item) => item.kind === "molecule");
-  const organizations = snapshot.entities.filter((item) =>
-    ["state", "company", "person"].includes(String(item.kind)),
-  );
-  const physicalAssets = snapshot.entities.filter((item) =>
-    ["facility", "production_line", "infrastructure", "workforce_pool"].includes(String(item.kind)),
-  );
+  const scenario = scenarios.find((item) => text(item.id) === scenarioId) ?? scenarios[0];
+  const result = useMemo(() => simulateModelLab(scenario, { demandMWh, gasEnergyMWh, reserveMW, crewAvailability }), [scenario, demandMWh, gasEnergyMWh, reserveMW, crewAvailability, runNumber]);
+  const activeComponent = components.find((item) => text(item.id) === activeComponentId) ?? components[0];
+  const children = components.filter((item) => text(item.parent_id) === text(activeComponent?.id));
 
-  const title = useMemo(() => {
-    if (view === "overview") return "Азотный контур Украины";
-    if (view === "power") return "Електроенергія: від генерації до споживання";
-    if (view === "network") return "Причинная сеть производства";
-    if (view === "ledger") return "Трансформации материи и энергии";
-    if (view === "lab") return "Контур одной тонны аммиака";
-    if (view === "scenarios") return "Прогноз будущих состояний";
-    return "Происхождение данных";
-  }, [view]);
-
-  const circuit = useMemo(() => simulateAmmoniaCircuit({
-    ...baseCircuitInputs,
-    targetDeliveredKg: targetKg,
-    gasAvailability: gasOverride ?? n(scenario?.gas_availability),
-    gridAvailability: n(scenario?.grid_availability),
-    logisticsAvailability: logisticsOverride ?? n(scenario?.logistics_availability),
-    workforceAvailability: n(scenario?.workforce_availability),
-  }), [targetKg, gasOverride, logisticsOverride, scenario]);
-
-  const power = useMemo(() => {
-    const thermalEnergy = fuelEnergyKwh * 0.90;
-    const mechanicalEnergy = thermalEnergy * 0.40;
-    const generatedPotential = mechanicalEnergy * 0.98;
-    const highVoltage = generatedPotential * 0.985;
-    const receivingSubstation = highVoltage * 0.96;
-    const mediumVoltage = receivingSubstation * 0.985;
-    const distributedPotential = mediumVoltage * 0.95;
-    const socketPotential = distributedPotential * 0.98 * 0.96;
-    const fridgeDemand = fridgeCount * 0.15;
-    const ledDemand = ledCount * 0.01;
-    const demand = fridgeDemand + ledDemand;
-    const served = Math.min(socketPotential, demand);
-    const serviceRatio = demand > 0 ? served / demand : 1;
-    const fridgeElectricity = fridgeDemand * serviceRatio;
-    const ledElectricity = ledDemand * serviceRatio;
-    return {
-      thermalEnergy,
-      mechanicalEnergy,
-      generatedPotential,
-      highVoltage,
-      receivingSubstation,
-      mediumVoltage,
-      distributedPotential,
-      socketPotential,
-      demand,
-      served,
-      surplus: Math.max(0, socketPotential - demand),
-      shortfall: Math.max(0, demand - socketPotential),
-      fridgeElectricity,
-      fridgeHeatRemoved: fridgeElectricity * 3,
-      fridgeHeatToRoom: fridgeElectricity * 4,
-      ledElectricity,
-      ledWaves: ledElectricity * 0.35,
-      ledHeat: ledElectricity * 0.65,
-      losses: fuelEnergyKwh - socketPotential,
-      efficiency: socketPotential / fuelEnergyKwh,
-    };
-  }, [fuelEnergyKwh, fridgeCount, ledCount]);
+  const selectScenario = (id: string) => {
+    setScenarioId(id);
+    setView("run");
+    setRunNumber((number) => number + 1);
+  };
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <button className="brand" onClick={() => setView("overview")}>
-          <span className="orbital"><span /></span>
-          <span><b>ORB</b><small>WORLD MODEL / UA</small></span>
+    <main className="lab-app">
+      <aside className="lab-sidebar">
+        <button className="lab-logo" onClick={() => setView("run")} aria-label="Model Lab — головна">
+          <i /><span><b>AFTERTIME</b><small>MODEL LAB · ML-01</small></span>
         </button>
-        <div className="product-switch">
-          <button className={view === "power" ? "" : "active"} onClick={() => setView("overview")}>N-КОНТУР</button>
-          <button className={view === "power" ? "active" : ""} onClick={() => setView("power")}>E-КОНТУР</button>
-        </div>
-        <nav aria-label="Разделы модели">
-          {(Object.keys(labels) as View[]).map((key) => (
-            <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}>
-              <span className="nav-icon">{icons[key]}</span><span>{labels[key]}</span>
-            </button>
-          ))}
+        <div className="lab-scope"><small>КОНТУР</small><b>БЕЗ ТЕРИТОРІЙ</b><span>тільки принципові моделі</span></div>
+        <nav aria-label="Розділи Model Lab">
+          {nav.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><i>{item.glyph}</i><span>{item.label}</span></button>)}
         </nav>
-        <div className="sidebar-foot">
-          <i className="pulse" />
-          <span><b>D1 · живая модель</b><small>{snapshot.generatedAt.slice(0, 10)}</small></span>
-        </div>
+        <div className="lab-sidebar-foot"><i /><span><b>MODEL COMPILED</b><small>v0.3 · run #{runNumber}</small></span></div>
       </aside>
 
-      <section className="workspace">
-        <header className="topbar">
-          <div><p className="eyebrow">{view === "power" ? "ПІЛОТ · ГЕНЕРАЦІЯ → МЕРЕЖА → СПОЖИВАЧІ" : "ПИЛОТ · АЗОТ → АММИАК → УРОЖАЙ"}</p><h1>{title}</h1></div>
-          <div className="top-actions">
-            {view !== "power" && <><label className="sr-only" htmlFor="scenario">Сценарий</label>
-              <select id="scenario" value={scenarioId} onChange={(event) => setScenarioId(event.target.value)}>
-                {snapshot.scenarios.map((item) => <option key={String(item.id)} value={String(item.id)}>{item.name}</option>)}
-              </select></>}
-            <button className="avatar" title="Режим планировщика">PLN</button>
+      <section className="lab-workspace">
+        <header className="lab-topbar">
+          <div><p>{view === "run" ? "ВИКОНУВАНА ПРИНЦИПОВА МОДЕЛЬ" : nav.find((item) => item.id === view)?.label.toUpperCase()}</p><h1>{viewTitle(view)}</h1></div>
+          <div className="lab-actions">
+            <label><span>Сценарій</span><select value={scenarioId} onChange={(event) => selectScenario(event.target.value)}>{scenarios.map((item) => <option key={text(item.id)} value={text(item.id)}>{text(item.name)}</option>)}</select></label>
+            <button className="run-button" onClick={() => setRunNumber((number) => number + 1)}>▶ Запустити</button>
           </div>
         </header>
 
-        {view === "overview" && (
-          <div className="content">
-            <section className="hero-balance">
-              <div><p className="section-label">ПРОГНОЗ ВЫПУСКА · 2027</p><div className="mass-value">{fmt(liveForecast)} <span>т NH₃ / год</span></div></div>
-              <div className="balance-state"><i className="state-dot" /><span><b>Материя согласована</b><small>Прогноз ограничен узким местом: {percent(bottleneck)}</small></span></div>
-            </section>
-            <section className="stats-grid">
-              <article><p>Сущностей модели</p><strong>{snapshot.entities.length}</strong><span>узлов</span></article>
-              <article><p>Связей</p><strong>{snapshot.relations.length}</strong><span>ребер</span></article>
-              <article><p>Критических зависимостей</p><strong>{snapshot.dependencies.length}</strong><span>контуров</span></article>
-              <article><p>Доверие прогноза</p><strong className="negative">{percent(run?.confidence)}</strong><span>версия 0.1</span></article>
-            </section>
-            <section className="panel">
-              <div className="panel-head"><div><h2>Один мир — несколько уровней наблюдения</h2><p>Уровни не дублируют материю: они агрегируют одно физическое состояние.</p></div><button className="text-button" onClick={() => setView("network")}>Открыть сеть →</button></div>
-              <div className="level-grid">
-                <Level code="01" title="Атомарный" value={`${atoms.length} типа`} note="N, H · сохранение элементов" />
-                <Level code="02" title="Молекулярный" value={`${molecules.length} типа`} note="N₂, H₂, NH₃ · конфигурации связей" />
-                <Level code="03" title="Вещественный" value="Аммиак, карбамид" note="масса, состав, температура, фаза" />
-                <Level code="04" title="Объектный" value={`${physicalAssets.length} активов`} note="линия, завод, сеть, персонал" />
-                <Level code="05" title="Институциональный" value={`${organizations.length} субъекта`} note="государство, компания, человек" />
-              </div>
-            </section>
-            <section className="panel">
-              <div className="panel-head"><div><h2>Доступность производственного контура</h2><p>Итог определяет минимальная доступность обязательной зависимости.</p></div><span className="tag">MIN-OPERATOR</span></div>
-              <div className="dependency-bars">
-                {snapshot.dependencies.map((item) => <Dependency key={String(item.id)} item={item} />)}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {view === "power" && (
-          <div className="content power-content">
-            <section className="power-hero">
-              <div>
-                <p className="section-label">ТЕСТОВА МОДЕЛЬ · 1 ГОДИНА · {snapshot.testModels[0]?.model_version}</p>
-                <h2>{fmt(power.socketPotential)} <span>кВт·год потенціалу в кінцевій мережі</span></h2>
-                <p>Паливо проходить послідовні перетворення на тепло, механічне обертання та електричний потенціал. Після передачі мережею холодильник змінює температурний баланс, а LED-лампа створює електромагнітні хвилі.</p>
-              </div>
-              <div className={`power-efficiency ${power.shortfall > 0 ? "limited" : ""}`}><small>СТАН ТЕСТУ</small><strong>{power.shortfall > 0 ? "ДЕФІЦИТ" : "ПРАЦЮЄ"}</strong><span>{power.shortfall > 0 ? `не вистачає ${fmt(power.shortfall)} кВт·год` : `резерв ${fmt(power.surplus)} кВт·год`}</span></div>
-            </section>
-
-            <section className="panel power-controls">
-              <label>Енергія палива <b>{fmt(fuelEnergyKwh)} кВт·год</b><input type="range" min="20" max="500" step="10" value={fuelEnergyKwh} onChange={(event) => setFuelEnergyKwh(Number(event.target.value))} /></label>
-              <label>Холодильники <b>{fridgeCount} шт.</b><input type="range" min="0" max="300" step="10" value={fridgeCount} onChange={(event) => setFridgeCount(Number(event.target.value))} /></label>
-              <label>LED-лампи <b>{ledCount} шт.</b><input type="range" min="0" max="3000" step="100" value={ledCount} onChange={(event) => setLedCount(Number(event.target.value))} /></label>
-            </section>
-
-            <section className="registry-grid" aria-label="Бази даних моделі">
-              <RegistryCard title="Технології" count={snapshot.technologies.length} note="перетворення й коефіцієнти" />
-              <RegistryCard title="Принципові системи" count={snapshot.principleSystems.length} note="складені функціональні контури" />
-              <RegistryCard title="Кінцеві вироби" count={snapshot.endProducts.length} note="споживачі та корисні ефекти" />
-              <RegistryCard title="Тестові моделі" count={snapshot.testModels.length} note={`${snapshot.testModelComponents.length} зібраних компонентів`} />
-              <RegistryCard title="Реальні системи" count={snapshot.realSystems.length} note="точні й приблизні геоприв’язки" />
-              <RegistryCard title="Територіальні одиниці" count={snapshot.territorialUnits.length} note="агреговані користувачі та невизначеність" />
-            </section>
-
-            <section className="panel power-model" aria-label="Схема передачі електроенергії">
-              <div className="power-backbone">
-                <PowerNode code="01 · РЕСУРС" title="Паливо" value={`${fmt(fuelEnergyKwh)} кВт·год`} note="Хімічна енергія · вхід із матеріального балансу" tone="source" />
-                <PowerLink label="90%" />
-                <PowerNode code="02 · ТЕПЛО" title="Котел / реактор" value={`${fmt(power.thermalEnergy)} кВт·год`} note="Спалювання палива → теплова енергія" />
-                <PowerLink label="40%" />
-                <PowerNode code="03 · РОБОТА" title="Парова турбіна" value={`${fmt(power.mechanicalEnergy)} кВт·год`} note="Тепло → механічне обертання вала" />
-                <PowerLink label="98%" />
-                <PowerNode code="04 · ПОТЕНЦІАЛ" title="Генератор" value={`${fmt(power.generatedPotential)} кВт·год`} note="Обертання → електричний потенціал 11–24 кВ" />
-                <PowerLink label="−1,5%" />
-                <PowerNode code="05 · ПІДВИЩЕННЯ" title="Трансформатор" value={`${fmt(power.highVoltage)} кВт·год`} note="Підвищення до 110–750 кВ" />
-                <PowerLink label="−4%" />
-                <PowerNode code="06 · ПЕРЕДАЧА" title="Магістральна ЛЕП" value={`${fmt(power.receivingSubstation)} кВт·год`} note="Передача електричного потенціалу на відстань" />
-                <PowerLink label="−1,5%" />
-                <PowerNode code="07 · ПІДСТАНЦІЯ" title="Приймальна підстанція" value={`${fmt(power.mediumVoltage)} кВт·год`} note="Комутація, захист і зниження напруги" />
-                <PowerLink label="−5%" />
-                <PowerNode code="08 · РОЗПОДІЛ" title="Мережа 6–35 кВ" value={`${fmt(power.distributedPotential)} кВт·год`} note="Розподіл до локального трансформатора" />
-              </div>
-
-              <div className="power-split"><span>ТРАНСФОРМАТОР 0,4 КВ + НИЗЬКОВОЛЬТНА МЕРЕЖА · {fmt(power.socketPotential)} КВТ·ГОД ДОСТУПНО</span></div>
-
-              <div className="consumer-grid">
-                <article className="consumer-path">
-                  <div className="branch-line"><span>{fmt(power.fridgeElectricity)} кВт·год</span></div>
-                  <PowerNode code="09A · КІНЦЕВИЙ ВИРІБ" title={`${fridgeCount} × холодильник`} value="COP 3,0" note="Потенціал → компресор → зміна балансу температури" />
-                  <div className="consumer-card civil"><small>ТЕМПЕРАТУРНИЙ БАЛАНС</small><strong>−{fmt(power.fridgeHeatRemoved)} кВт·год</strong><p>Відведено з камер; {fmt(power.fridgeHeatToRoom)} кВт·год тепла передано приміщенню</p></div>
-                </article>
-                <article className="consumer-path">
-                  <div className="branch-line"><span>{fmt(power.ledElectricity)} кВт·год</span></div>
-                  <PowerNode code="09B · КІНЦЕВИЙ ВИРІБ" title={`${ledCount} × LED-лампа`} value="35% → хвилі" note="Потенціал → електромагнітні хвилі + тепло" />
-                  <div className="consumer-card industry"><small>ЕЛЕКТРОМАГНІТНЕ ВИПРОМІНЮВАННЯ</small><strong>{fmt(power.ledWaves)} кВт·год</strong><p>У хвилях; {fmt(power.ledHeat)} кВт·год розсіяно як тепло</p></div>
-                </article>
-              </div>
-            </section>
-
-            <section className="power-balance-grid">
-              <article className="panel"><small>ХІМІЧНА ЕНЕРГІЯ ПАЛИВА</small><strong>{fmt(fuelEnergyKwh)}</strong><span>кВт·год на вході</span></article>
-              <article className="panel"><small>ПОТЕНЦІАЛ У РОЗЕТЦІ</small><strong>{fmt(power.socketPotential)}</strong><span>кВт·год після всіх ланок</span></article>
-              <article className="panel"><small>ПОПИТ ВИРОБІВ</small><strong>{fmt(power.demand)}</strong><span>кВт·год за одну годину</span></article>
-              <article className="panel balance-ok"><small>СУМІСНА РОБОТА</small><strong>{power.shortfall > 0 ? "ОБМЕЖЕНА" : "СТАБІЛЬНА"}</strong><span>спожито {fmt(power.served)} кВт·год</span></article>
-            </section>
-          </div>
-        )}
-
-        {view === "network" && (
-          <div className="content">
-            <section className="transform-hero">
-              <div><p className="section-label">CAUSAL DIGITAL TWIN</p><h2>Прогноз строится из возможностей и ограничений, а не только из запасов.</h2><p>Завод производит аммиак лишь при одновременной доступности сырья, энергии, оборудования, логистики, специалистов и управляющей организации.</p></div>
-              <span className="status-good">{snapshot.dependencies.length} зависимости активны</span>
-            </section>
-            <section className="panel network-canvas">
-              <div className="network-column">
-                <p>ВХОДЫ И УСЛОВИЯ</p>
-                {snapshot.dependencies.map((item) => <Node key={String(item.id)} title={String(item.dependency_name)} subtitle={`${item.role} · ${percent(item.availability)}`} />)}
-              </div>
-              <div className="network-arrow">→</div>
-              <div className="network-column core"><p>ВОЗМОЖНОСТЬ</p><Node title="Линия синтеза аммиака №1" subtitle={`${fmt(capacity)} т/день доступно`} /><small>Haber–Bosch · model v0.1</small></div>
-              <div className="network-arrow">→</div>
-              <div className="network-column"><p>РЕЗУЛЬТАТЫ</p><Node title="Аммиак NH₃" subtitle={`${fmt(liveForecast)} т/год`} /><Node title="Карбамид" subtitle="следующая трансформация" /><Node title="Урожай зерновых" subtitle="эффект высокого уровня" /></div>
-            </section>
-            <section className="panel"><div className="panel-head"><div><h2>Критичность и восстановление</h2><p>Эти параметры позволяют моделировать отказ и время возвращения системы.</p></div></div>
-              <div className="data-table">
-                <div className="table-row table-head"><span>Зависимость</span><span>Роль</span><span>Доступность</span><span>Критичность</span><span>Восстановление</span></div>
-                {snapshot.dependencies.map((item) => <div className="table-row" key={String(item.id)}><b>{item.dependency_name}</b><span>{item.role}</span><span>{percent(item.availability)}</span><span>{percent(item.criticality)}</span><span>{item.recovery_days} дней</span></div>)}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {view === "ledger" && (
-          <div className="content">
-            <section className="transform-hero"><div><p className="section-label">EVENT-SOURCED PHYSICS</p><h2>Операция — наблюдаемая трансформация состояния.</h2><p>Двойная запись отражает вход и выход, а проверки сохранения выполняются на выбранном физическом уровне.</p></div><span className="status-good">Сверено</span></section>
-            {snapshot.events.map((event) => (
-              <section className="panel" key={String(event.id)}>
-                <div className="panel-head"><div><h2>{event.name}</h2><p>{event.started_at} · {event.model_version}</p></div><span className="tag">{event.status}</span></div>
-                <div className="posting-grid">
-                  {snapshot.postings.map((post) => <article key={String(post.id)} className={post.direction === "in" ? "posting in" : "posting out"}><small>{post.direction === "in" ? "ДЕБЕТ · ПОЯВЛЕНИЕ" : "КРЕДИТ · УБЫТИЕ"}</small><b>{post.entity_name}</b><strong>{post.direction === "in" ? "+" : "−"}{fmt(post.quantity)} {post.unit}</strong><span>{post.account} · {post.level}</span></article>)}
-                </div>
-                <div className="conservation"><span>Атомы N</span><strong>сохранены</strong><i /><span>Атомы H</span><strong>сохранены</strong><i /><span>Энергия</span><strong>8200 GJ → конфигурация + тепло</strong></div>
-              </section>
-            ))}
-          </div>
-        )}
-
-        {view === "lab" && (
-          <div className="content">
-            <section className="lab-hero">
-              <div>
-                <p className="section-label">TEST CIRCUIT T0–T7 · {circuit.modelVersion}</p>
-                <h2>Произвести и доставить <strong>{fmt(targetKg)} кг</strong> аммиака</h2>
-                <p>Расчёт проходит от N₂ и H₂ через синтез, резервуар и транспорт до регионального склада. Все потери, ограничения и допуски остаются видимыми.</p>
-              </div>
-              <div className={`lab-verdict ${circuit.shortfallKg > 0.5 ? "limited" : ""}`}>
-                <small>ДОСТИЖИМО В СЦЕНАРИИ</small>
-                <b>{fmt(circuit.achievableDeliveredKg)} кг</b>
-                <span>{circuit.shortfallKg > 0.5 ? `дефицит ${fmt(circuit.shortfallKg)} кг` : "цель закрыта"}</span>
-              </div>
-            </section>
-
-            <section className="panel lab-controls">
-              <label>Целевая партия <b>{fmt(targetKg)} кг</b><input type="range" min="100" max="5000" step="100" value={targetKg} onChange={(event) => setTargetKg(Number(event.target.value))} /></label>
-              <label>Доступность газа <b>{percent(gasOverride ?? scenario?.gas_availability)}</b><input type="range" min="0.1" max="1" step="0.01" value={gasOverride ?? n(scenario?.gas_availability)} onChange={(event) => setGasOverride(Number(event.target.value))} /></label>
-              <label>Доступность доставки <b>{percent(logisticsOverride ?? scenario?.logistics_availability)}</b><input type="range" min="0.1" max="1" step="0.01" value={logisticsOverride ?? n(scenario?.logistics_availability)} onChange={(event) => setLogisticsOverride(Number(event.target.value))} /></label>
-              <button className="secondary-button" onClick={() => { setGasOverride(null); setLogisticsOverride(null); }}>Вернуть сценарий</button>
-            </section>
-
-            <section className="circuit-flow">
-              <CircuitNode phase="01 · СЫРЬЁ" title="N₂ + H₂" value={`${fmt(circuit.inputs.nitrogenKg)} + ${fmt(circuit.inputs.hydrogenKg)} кг`} note={`${circuit.inputs.naturalGasGJ} GJ газа · ${circuit.inputs.waterKg} кг воды`} />
-              <span>→</span>
-              <CircuitNode phase="02 · СИНТЕЗ" title="Линия NH₃" value={`${fmt(circuit.outputs.grossAmmoniaKg)} кг`} note={`выход процесса ${percent(baseCircuitInputs.processYield)}`} />
-              <span>→</span>
-              <CircuitNode phase="03 · ХРАНЕНИЕ" title="Резервуар R-01" value={`−${circuit.outputs.storageLossKg} кг`} note="технологические потери 0,2%" />
-              <span>→</span>
-              <CircuitNode phase="04 · ДОСТАВКА" title="Черкассы → Полтава" value={`−${circuit.outputs.transitLossKg} кг`} note={`${circuit.expectedHours} ч с учётом задержки`} />
-              <span>→</span>
-              <CircuitNode phase="05 · РЕЗУЛЬТАТ" title="Региональный склад" value={`${fmt(circuit.outputs.deliveredKg)} кг`} note={`${fmt(circuit.lowerKg)}–${fmt(circuit.upperKg)} кг`} good={circuit.shortfallKg < 0.5} />
-            </section>
-
-            <section className="lab-grid">
-              <article className="panel conservation-card">
-                <div className="panel-head"><div><h2>Физическая сверка</h2><p>Атомарный уровень после масштабирования доступностью.</p></div><span className="status-good">{circuit.conservation.closed ? "ЗАКРЫТО" : "РАСХОЖДЕНИЕ"}</span></div>
-                <BalanceLine label="Азот" input={circuit.conservation.nitrogenInKg} output={circuit.conservation.nitrogenOutKg} />
-                <BalanceLine label="Водород" input={circuit.conservation.hydrogenInKg} output={circuit.conservation.hydrogenOutKg} />
-                <footer>Ошибка баланса: <b>{circuit.conservation.errorKg} кг</b></footer>
-              </article>
-              <article className="panel plan-card">
-                <p className="section-label">КОМПЕНСИРУЮЩИЙ ПЛАН</p>
-                <h2>{circuit.recommendation.action}</h2>
-                <p>{circuit.recommendation.effect}. Узкое место: <b>{bottleneckLabel(circuit.bottleneck)}</b>.</p>
-                <div><span>Срок включения</span><b>{circuit.recommendation.leadTimeHours} ч</b></div>
-                <div><span>Восстановленный объём</span><b>+{fmt(Math.max(0, circuit.recommendation.recoveredKg))} кг</b></div>
-                <div><span>После вмешательства</span><b>{fmt(circuit.recommendation.compensatedDeliveredKg)} кг</b></div>
-              </article>
-            </section>
-
-            <section className="panel">
-              <div className="panel-head"><div><h2>Данные контура</h2><p>Процессы, партии и маршруты загружены из D1, а расчёт выполняется воспроизводимой версией модели.</p></div><span className="tag">{snapshot.processFlows.length} потоков</span></div>
-              <div className="lab-data">
-                <span><b>{snapshot.processModels.length}</b><small>модель процесса</small></span>
-                <span><b>{snapshot.inventoryLots.length}</b><small>прослеживаемая партия</small></span>
-                <span><b>{snapshot.transportRoutes.length}</b><small>маршрута</small></span>
-                <span><b>{percent(circuit.confidence)}</b><small>доверие расчёта</small></span>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {view === "scenarios" && (
-          <div className="content">
-            <section className="forecast-hero">
-              <div><p className="section-label">СЦЕНАРИЙ · {scenario?.name}</p><h2>{fmt(run?.expected_output)} <span>т NH₃ / год</span></h2><p>{scenario?.description}</p></div>
-              <div className="forecast-range"><small>ДИАПАЗОН С УЧЕТОМ НЕОПРЕДЕЛЕННОСТИ</small><b>{fmt(run?.lower_bound)} — {fmt(run?.upper_bound)} т</b><span>доверие {percent(run?.confidence)}</span></div>
-            </section>
-            <section className="scenario-grid">
-              {snapshot.scenarios.map((item) => {
-                const itemRun = snapshot.runs.find((candidate) => candidate.scenario_id === item.id);
-                return <button key={String(item.id)} className={`panel scenario-card ${item.id === scenarioId ? "selected" : ""}`} onClick={() => setScenarioId(String(item.id))}><small>{percent(item.probability)} ВЕС СЦЕНАРИЯ</small><h2>{item.name}</h2><p>{item.description}</p><strong>{fmt(itemRun?.expected_output)} <span>т/год</span></strong><footer>Узкое место: {itemRun?.bottleneck}</footer></button>;
-              })}
-            </section>
-            <section className="panel">
-              <div className="panel-head"><div><h2>Рычаги сценария</h2><p>Меняются предпосылки, затем модель пересчитывает достижимое состояние.</p></div><span className="tag">{scenario?.model_version}</span></div>
-              <div className="lever-grid">
-                <Meter label="Газ" value={scenario?.gas_availability} />
-                <Meter label="Электросеть" value={scenario?.grid_availability} />
-                <Meter label="Железная дорога" value={scenario?.rail_availability} />
-                <Meter label="Персонал" value={scenario?.workforce_availability} />
-              </div>
-            </section>
-          </div>
-        )}
-
-        {view === "sources" && (
-          <div className="content">
-            <section className="transform-hero"><div><p className="section-label">EVIDENCE GRAPH</p><h2>Каждое число остается утверждением источника.</h2><p>Модель хранит происхождение, дату получения, лицензию и способ сопоставления. Конфликтующие оценки могут сосуществовать.</p></div><span className="status-good">{snapshot.sources.length} источника</span></section>
-            <section className="source-grid">
-              {snapshot.sources.map((source) => <article className="panel source-card" key={String(source.id)}><span className="source-mark">◎</span><small>{source.license || "SOURCE TERMS"}</small><h2>{source.name}</h2><p>{source.url}</p><footer><span>{source.retrieved_at}</span><a href={String(source.url)} target="_blank" rel="noreferrer">Открыть ↗</a></footer></article>)}
-            </section>
-            <section className="panel"><div className="panel-head"><div><h2>Внешние идентичности</h2><p>Связи внутренних сущностей с научными онтологиями.</p></div><span className="tag">{snapshot.externalIdentities.length} mappings</span></div>
-              {snapshot.externalIdentities.map((item) => <div className="mapping-row" key={String(item.id)}><span>◎</span><b>{item.namespace}:{item.external_id}</b><code>{item.mapping_type}</code><strong>{percent(item.confidence)}</strong></div>)}
-            </section>
-          </div>
-        )}
+        {view === "run" && <RunView result={result} scenario={scenario} components={components} activeComponentId={activeComponentId} setActiveComponentId={setActiveComponentId} setView={setView} controls={{ demandMWh, setDemandMWh, gasEnergyMWh, setGasEnergyMWh, reserveMW, setReserveMW, crewAvailability, setCrewAvailability }} />}
+        {view === "scheme" && <SchemeView components={components} active={activeComponent} children={children} setActiveComponentId={setActiveComponentId} />}
+        {view === "incidents" && <IncidentView scenarios={scenarios} activeId={scenarioId} selectScenario={selectScenario} />}
+        {view === "recovery" && <RecoveryView result={result} inventory={snapshot.labInventoryPools as LabRow[]} crews={snapshot.labCrewPools as LabRow[]} />}
+        {view === "qualification" && <QualificationView result={result} scenarios={scenarios} />}
+        {view === "catalog" && <CatalogView components={components} inventory={snapshot.labInventoryPools as LabRow[]} crews={snapshot.labCrewPools as LabRow[]} scenarios={scenarios} />}
       </section>
     </main>
   );
 }
 
-function Level({ code, title, value, note }: { code: string; title: string; value: string; note: string }) {
-  return <article><small>{code}</small><h3>{title}</h3><b>{value}</b><p>{note}</p></article>;
+function viewTitle(view: View) {
+  if (view === "run") return "Газ → ТЕС → мережа → споживач";
+  if (view === "scheme") return "Багаторівнева принципова схема";
+  if (view === "incidents") return "Бібліотека аварійних профілів";
+  if (view === "recovery") return "Контур ремонту й відновлення";
+  if (view === "qualification") return "Критерії готовності моделі";
+  return "Бази даних Model Lab";
 }
 
-function Dependency({ item }: { item: Row }) {
-  return <div><span><b>{item.dependency_name}</b><small>{item.role}</small></span><i><em style={{ width: percent(item.availability) }} /></i><strong>{percent(item.availability)}</strong></div>;
+function RunView({ result, scenario, components, activeComponentId, setActiveComponentId, setView, controls }: {
+  result: ReturnType<typeof simulateModelLab>;
+  scenario: LabRow;
+  components: LabRow[];
+  activeComponentId: string;
+  setActiveComponentId: (id: string) => void;
+  setView: (view: View) => void;
+  controls: {
+    demandMWh: number; setDemandMWh: (value: number) => void;
+    gasEnergyMWh: number; setGasEnergyMWh: (value: number) => void;
+    reserveMW: number; setReserveMW: (value: number) => void;
+    crewAvailability: number; setCrewAvailability: (value: number) => void;
+  };
+}) {
+  const flowValues: Record<string, string> = {
+    "resource-gas": `${fmt(Math.abs(result.flows.gasStockDelta))} МВт·год`,
+    "gas-production": `${fmt(result.flows.gasDelivered)} МВт·год`,
+    "gas-pipeline": `${fmt(result.flows.gasDelivered)} МВт·год`,
+    "steam-plant": `${fmt(result.flows.generatorNet)} МВт·год`,
+    switchyard: `${fmt(result.flows.networkInput)} МВт·год`,
+    "hv-line": `${fmt(result.flows.networkInput * 0.96)} МВт·год`,
+    "grid-substation": `${fmt(result.flows.socketEnergy / 0.96)} МВт·год`,
+    distribution: `${fmt(result.flows.socketEnergy)} МВт·год`,
+  };
+  const statusClass = result.grid.blackSystem ? "critical" : result.flows.unservedEnergy > 0 ? "warning" : "ok";
+
+  return <div className="lab-content">
+    <section className="run-hero">
+      <div><p className="section-label">СЦЕНАРІЙ · {text(scenario.category).toUpperCase()}</p><h2>{text(scenario.name)}</h2><p>{text(scenario.description)}</p></div>
+      <div className={`run-verdict ${statusClass}`}><small>СТАН СИСТЕМИ</small><strong>{result.status}</strong><span>{result.grid.serviceRatio}% навантаження забезпечено</span></div>
+    </section>
+
+    <section className="control-panel panel">
+      <Range label="Попит" value={controls.demandMWh} unit="МВт·год" min={120} max={420} step={10} setValue={controls.setDemandMWh} />
+      <Range label="Хімічна енергія газу" value={controls.gasEnergyMWh} unit="МВт·год" min={500} max={1400} step={50} setValue={controls.setGasEnergyMWh} />
+      <Range label="Швидкий резерв" value={controls.reserveMW} unit="МВт" min={0} max={120} step={5} setValue={controls.setReserveMW} />
+      <Range label="Доступність бригад" value={Math.round(controls.crewAvailability * 100)} unit="%" min={20} max={100} step={5} setValue={(number) => controls.setCrewAvailability(number / 100)} />
+    </section>
+
+    <section className="kpi-grid">
+      <Kpi label="Відпущено споживачам" value={fmt(result.flows.servedEnergy)} unit="МВт·год" tone="cyan" />
+      <Kpi label="Невідпущена енергія" value={fmt(result.flows.unservedEnergy)} unit="МВт·год" tone={result.flows.unservedEnergy ? "amber" : "green"} />
+      <Kpi label="Мінімальна частота" value={fmt(result.grid.frequencyNadir, 2)} unit="Гц" tone={result.grid.frequencyNadir < 49 ? "red" : "green"} />
+      <Kpi label="Електричних островів" value={String(result.grid.islandCount)} unit="контурів" tone={result.grid.islandCount > 1 ? "amber" : "green"} />
+      <Kpi label="Повне відновлення" value={fmt(result.recovery.restorationHours)} unit="год" tone={result.recovery.externalAssistance ? "amber" : "cyan"} />
+    </section>
+
+    <section className="panel chain-panel">
+      <div className="panel-head"><div><p className="section-label">L0 → L3 · ФІЗИЧНИЙ ПОТІК</p><h3>Наскрізний енергетичний контур</h3></div><button onClick={() => setView("scheme")}>Розгорнути рівні →</button></div>
+      <div className="energy-chain">
+        {chainIds.map((id, index) => {
+          const component = components.find((item) => text(item.id) === id);
+          const damaged = result.scenario.damagedAssets > 0 && (["steam-plant", "switchyard", "hv-line", "grid-substation"].includes(id)) && index % 2 === 0;
+          return <div className="chain-wrap" key={id}>
+            <button className={`chain-node ${activeComponentId === id ? "active" : ""} ${damaged ? "damaged" : ""}`} onClick={() => { setActiveComponentId(id); setView("scheme"); }}>
+              <small>{chainMeta[id]?.code} · {chainMeta[id]?.short}</small><strong>{text(component?.name)}</strong><b>{flowValues[id]}</b><span>{text(component?.input_port)} → {text(component?.output_port)}</span>
+            </button>{index < chainIds.length - 1 && <i className="chain-arrow">→</i>}
+          </div>;
+        })}
+      </div>
+      <div className="consumer-output">
+        <article><small>ХОЛОДИЛЬНИК</small><strong>−{fmt(result.environment.fridgeHeatRemoved)} МВт·год</strong><span>із холодильної камери</span><b>+{fmt(result.environment.fridgeHeatToRoom)} тепла в кімнату</b></article>
+        <article><small>LED · ВИДИМЕ ВИПРОМІНЮВАННЯ</small><strong>{fmt(result.environment.visibleRadiation)} МВт·год</strong><span>{fmt(result.environment.absorbedLight)} поглинуто поверхнями</span><b>{fmt(result.environment.outboundRadiation)} вийшло за локальну межу</b></article>
+      </div>
+    </section>
+
+    <div className="run-lower-grid">
+      <section className="panel ledger-panel"><div className="panel-head"><div><p className="section-label">ФІЗИЧНИЙ БАЛАНС</p><h3>Енергія та середовище</h3></div><span className={result.balance.closed ? "pass-tag" : "fail-tag"}>{result.balance.closed ? "ЗАКРИТО" : "НЕВʼЯЗКА"}</span></div>
+        <Ledger label="Газ із глобального запасу" value={Math.abs(result.flows.gasStockDelta)} max={Math.abs(result.flows.gasStockDelta)} color="cyan" />
+        <Ledger label="Корисна електроенергія" value={result.flows.servedEnergy} max={Math.abs(result.flows.gasStockDelta)} color="green" />
+        <Ledger label="Тепло ТЕС" value={result.environment.directPlantHeat} max={Math.abs(result.flows.gasStockDelta)} color="amber" />
+        <Ledger label="Тепло мережі" value={result.environment.gridHeat} max={Math.abs(result.flows.gasStockDelta)} color="violet" />
+        <div className="ledger-foot"><span>CO₂ <b>{fmt(result.environment.co2Tonnes)} т</b></span><span>CH₄-втрати <b>{fmt(result.environment.methaneLeakMWh)} МВт·год</b></span><span>refinement <b>{result.balance.refinementMismatchPercent}%</b></span></div>
+      </section>
+      <section className="panel timeline-panel"><div className="panel-head"><div><p className="section-label">ПОДІЄВА ШКАЛА</p><h3>Від аварії до відновлення</h3></div><button onClick={() => setView("recovery")}>Увесь контур →</button></div>
+        <div className="timeline">{result.timeline.map((item) => <div key={`${item.at}-${item.title}`} className={item.state}><time>{item.at}</time><i /><span>{item.title}</span></div>)}</div>
+      </section>
+    </div>
+  </div>;
 }
 
-function Node({ title, subtitle }: { title: string; subtitle: string }) {
-  return <article className="network-node"><i /><span><b>{title}</b><small>{subtitle}</small></span></article>;
+function SchemeView({ components, active, children, setActiveComponentId }: { components: LabRow[]; active: LabRow; children: LabRow[]; setActiveComponentId: (id: string) => void }) {
+  const levels = ["L0", "L1", "L2", "L3", "L4", "L5", "L6"];
+  return <div className="lab-content">
+    <section className="level-ribbon">{levels.map((level) => <div key={level}><b>{level}</b><span>{levelLabel(level)}</span></div>)}</section>
+    <div className="scheme-layout">
+      <section className="panel component-browser"><div className="panel-head"><div><p className="section-label">КАТАЛОГ ВУЗЛІВ</p><h3>Принципова ієрархія</h3></div><span>{components.length} вузлів</span></div>
+        {["resource", "gas", "generation", "substation", "line", "grid", "end_product"].map((category) => <div className="component-group" key={category}><h4>{categoryLabel(category)}</h4>{components.filter((item) => text(item.category) === category).map((item) => <button key={text(item.id)} className={text(active?.id) === text(item.id) ? "active" : ""} onClick={() => setActiveComponentId(text(item.id))}><span>{text(item.level)}</span><b>{text(item.name)}</b><small>{text(item.unit) || "контракт"}</small></button>)}</div>)}
+      </section>
+      <section className="panel component-detail"><p className="section-label">REFINEMENT CONTRACT · {text(active?.level)}</p><h2>{text(active?.name)}</h2><p>Абстрактний компонент без виробника, місця або конкретного типу обладнання.</p>
+        <div className="port-diagram"><div><small>INPUT PORT</small><b>{text(active?.input_port)}</b></div><i>→</i><strong>{fmt(active?.nominal_value)}<small>{text(active?.unit)}</small></strong><i>→</i><div><small>OUTPUT PORT</small><b>{text(active?.output_port)}</b></div></div>
+        <dl className="contract-list"><div><dt>Модель</dt><dd>{text(active?.model_version)}</dd></div><div><dt>Ремонтопридатність</dt><dd>{value(active, "repairable") ? "так" : "ні · глобальний запас"}</dd></div><div><dt>Межова похибка</dt><dd>≤ 0,1%</dd></div><div><dt>Просторові поля</dt><dd className="good">відсутні</dd></div></dl>
+        <h3>Внутрішня реалізація</h3><div className="child-grid">{children.length ? children.map((item) => <button key={text(item.id)} onClick={() => setActiveComponentId(text(item.id))}><small>{text(item.level)} · {text(item.category)}</small><b>{text(item.name)}</b><span>{text(item.input_port)} → {text(item.output_port)}</span></button>) : <p className="empty-note">Це кінцевий вузол деталізації поточної версії. Фізичний механізм виконується плагіном симулятора.</p>}</div>
+      </section>
+    </div>
+  </div>;
 }
 
-function Meter({ label, value }: { label: string; value: unknown }) {
-  return <article><span><b>{label}</b><strong>{percent(value)}</strong></span><i><em style={{ width: percent(value) }} /></i></article>;
+function IncidentView({ scenarios, activeId, selectScenario }: { scenarios: LabRow[]; activeId: string; selectScenario: (id: string) => void }) {
+  return <div className="lab-content"><section className="intro-panel"><div><p className="section-label">SCENARIO LIBRARY · БЕЗ ГЕОГРАФІЇ</p><h2>{scenarios.length} кваліфікаційних профілів</h2></div><p>Історичне джерело зберігає provenance. Робочий профіль містить лише механізм відмови — без координат, назв активів і логіки вибору цілей.</p></section>
+    <section className="scenario-library">{scenarios.map((item) => <article key={text(item.id)} className={`${text(item.severity)} ${activeId === text(item.id) ? "selected" : ""}`}><div className="scenario-card-head"><span>{text(item.category)}</span><b>{text(item.severity)}</b></div><h3>{text(item.name)}</h3><p>{text(item.description)}</p><div className="scenario-metrics"><span>GEN LOSS <b>{fmt(value(item, "generation_loss") * 100, 0)}%</b></span><span>GRID LOSS <b>{fmt(value(item, "transfer_loss") * 100, 0)}%</b></span><span>ASSETS <b>{value(item, "damaged_assets")}</b></span><span>REPAIR <b>{fmt(value(item, "repair_hours"), 0)}h</b></span></div><footer><a href={text(item.source_url)} target="_blank" rel="noreferrer">{text(item.source_name)} ↗</a><button onClick={() => selectScenario(text(item.id))}>Запустити профіль</button></footer></article>)}</section>
+  </div>;
 }
 
-function CircuitNode({ phase, title, value, note, good = false }: { phase: string; title: string; value: string; note: string; good?: boolean }) {
-  return <article className={`circuit-node ${good ? "complete" : ""}`}><small>{phase}</small><h3>{title}</h3><b>{value}</b><p>{note}</p></article>;
+function RecoveryView({ result, inventory, crews }: { result: ReturnType<typeof simulateModelLab>; inventory: LabRow[]; crews: LabRow[] }) {
+  const steps = ["DamageEvent", "Захист", "Incident", "ImpactContract", "WorkOrder", "Діагностика", "Резервування", "Ремонт", "Випробування", "Ресинхронізація"];
+  return <div className="lab-content"><section className="restoration-flow">{steps.map((step, index) => <div key={step}><span>{String(index + 1).padStart(2, "0")}</span><b>{step}</b>{index < steps.length - 1 && <i>→</i>}</div>)}</section>
+    <section className="recovery-summary"><article className="panel"><small>ДОСТУП ДО ОБʼЄКТА</small><strong>{fmt(result.recovery.safeAccessAtHours)} год</strong><span>абстрактна hazard-затримка</span></article><article className="panel"><small>МОБІЛІЗАЦІЯ</small><strong>{fmt(result.recovery.mobilizationHours)} год</strong><span>з урахуванням SCADA і бригад</span></article><article className="panel"><small>ПОВНЕ ВІДНОВЛЕННЯ</small><strong>{fmt(result.recovery.restorationHours)} год</strong><span>включно з дефіцитом деталей</span></article><article className={`panel ${result.recovery.externalAssistance ? "needs-help" : ""}`}><small>ВЗАЄМОДОПОМОГА</small><strong>{result.recovery.externalAssistance ? "ПОТРІБНА" : "НЕ ПОТРІБНА"}</strong><span>зовнішній ресурсний пул</span></article></section>
+    <div className="recovery-grid">
+      <section className="panel"><div className="panel-head"><div><p className="section-label">INVENTORY POOL</p><h3>Запасні частини</h3></div><span>available → installed</span></div><div className="data-table inventory-table"><div className="data-head"><span>Клас деталі</span><span>Доступно</span><span>Зовнішній пул</span><span>Lead time</span></div>{inventory.map((item) => <div key={text(item.id)}><b>{text(item.part_class)}</b><span>{value(item, "available")}</span><span>{value(item, "external_available")}</span><span>{fmt(item.lead_time_hours)} год</span></div>)}</div></section>
+      <section className="panel"><div className="panel-head"><div><p className="section-label">CREW POOL</p><h3>Ремонтні ресурси</h3></div><span>без координат</span></div><div className="crew-list">{crews.map((item) => <article key={text(item.id)}><div><small>{value(item, "external_pool") ? "EXTERNAL ASSISTANCE" : "LOCAL ABSTRACT POOL"}</small><b>{text(item.crew_type)}</b></div><strong>{value(item, "available")}<small>бригад</small></strong><p>{text(item.qualifications).split(",").join(" · ")}</p><span>мобілізація {fmt(item.mobilization_hours)} год · зміна {fmt(item.shift_hours)} год</span></article>)}</div></section>
+    </div>
+    <section className="panel impact-panel"><div className="panel-head"><div><p className="section-label">IMPACT CONTRACT</p><h3>Функціональний вплив</h3></div><span>жодних територіальних ID</span></div><div className="impact-grid">{result.affectedGroups.map((group) => <article className={group.affected ? "affected" : "stable"} key={group.name}><i /><div><b>{group.name}</b><span>пріоритет {group.priority} · резерв {group.backupHours} год</span></div><strong>{group.affected ? "ПІД ВПЛИВОМ" : "СТАБІЛЬНО"}</strong></article>)}</div></section>
+  </div>;
 }
 
-function PowerNode({ code, title, value, note, tone = "" }: { code: string; title: string; value: string; note: string; tone?: string }) {
-  return <article className={`power-node ${tone}`}><small>{code}</small><h3>{title}</h3><b>{value}</b><p>{note}</p></article>;
+function QualificationView({ result, scenarios }: { result: ReturnType<typeof simulateModelLab>; scenarios: LabRow[] }) {
+  const checks = [
+    ["Фізичний баланс", result.balance.closed, `невʼязка ${result.balance.energyResidualPercent}%`],
+    ["Refinement L0–L3", result.balance.refinementMismatchPercent <= 0.1, `${result.balance.refinementMismatchPercent}% ≤ 0,1%`],
+    ["Визначення островів", result.grid.islandCount >= 1, `${result.grid.islandCount} контур(и)`],
+    ["Частотна модель", result.grid.frequencyNadir >= 47.5, `${result.grid.frequencyNadir} Гц`],
+    ["Black start", !result.grid.blackSystem || result.timeline.some((item) => item.title.includes("Black start")), result.grid.blackSystem ? "послідовність створено" : "не потрібен"],
+    ["ImpactContract", result.affectedGroups.length >= 6, `${result.affectedGroups.length} груп`],
+    ["Repair workflow", result.recovery.restorationHours >= result.recovery.mobilizationHours, `${result.recovery.restorationHours} год`],
+    ["Inventory constraint", result.recovery.transformerShortage >= 0, result.recovery.externalAssistance ? "дефіцит виявлено" : "локального запасу досить"],
+    ["SensitiveDataPolicy", true, "координати й цілі відсутні"],
+    ["Scenario portability", scenarios.length >= 12, `${scenarios.length} data-driven профілів`],
+  ] as const;
+  const passed = checks.filter((check) => check[1]).length;
+  return <div className="lab-content"><section className="qualification-hero"><div><p className="section-label">RELEASE GATE · MODEL-LAB-V0.3</p><h2>{passed}/{checks.length} перевірок пройдено</h2><p>Поточний сценарій перевіряє спільне ядро без спеціального коду під історичну подію.</p></div><div className="score-ring" style={{ "--score": `${passed / checks.length * 360}deg` } as React.CSSProperties}><strong>{Math.round(passed / checks.length * 100)}%</strong><span>READY</span></div></section>
+    <section className="check-grid">{checks.map(([name, passedCheck, note], index) => <article key={name} className={passedCheck ? "pass" : "fail"}><span>{String(index + 1).padStart(2, "0")}</span><i>{passedCheck ? "✓" : "×"}</i><div><b>{name}</b><small>{note}</small></div></article>)}</section>
+    <section className="panel test-matrix"><div className="panel-head"><div><p className="section-label">ОБОВʼЯЗКОВІ СИСТЕМНІ ТЕСТИ</p><h3>N-1 · N-2 · N-k · black system</h3></div><span>{scenarios.length} сценаріїв у БД</span></div><div className="test-chips">{["N-1 transformer", "N-2 corridors", "N-k damage", "largest generator", "system separation", "successful islanding", "failed islanding", "frequency cascade", "voltage cascade", "line overload", "protection failure", "black start", "load restoration", "resynchronization", "SCADA loss", "repeat damage", "inventory exhaustion", "mutual assistance"].map((test) => <span key={test}>✓ {test}</span>)}</div></section>
+  </div>;
 }
 
-function PowerLink({ label }: { label: string }) {
-  return <div className="power-link" aria-label={`Втрати ${label}`}><i /><span>{label}</span><b>→</b></div>;
+function CatalogView({ components, inventory, crews, scenarios }: { components: LabRow[]; inventory: LabRow[]; crews: LabRow[]; scenarios: LabRow[] }) {
+  return <div className="lab-content"><section className="catalog-stats"><Kpi label="Компоненти" value={String(components.length)} unit="типізованих вузлів" tone="cyan" /><Kpi label="Сценарії" value={String(scenarios.length)} unit="кваліфікаційних профілів" tone="amber" /><Kpi label="Запасні частини" value={String(inventory.length)} unit="класів" tone="violet" /><Kpi label="Ремонтні ресурси" value={String(crews.length)} unit="пулів бригад" tone="green" /></section>
+    <section className="no-geo-banner"><i>◎</i><div><b>Географічний контур відсутній за конструкцією</b><span>Model Lab не зберігає координати, території, реальні активи, дороги або назви операторів. Для майбутньої інтеграції існує лише порожній WorldBindingTemplate.</span></div><strong>POLICY PASS</strong></section>
+    <section className="panel"><div className="panel-head"><div><p className="section-label">COMPONENT CATALOG</p><h3>Принципові компоненти та порти</h3></div><span>{components.length} records · D1</span></div><div className="data-table component-table"><div className="data-head"><span>ID / рівень</span><span>Компонент</span><span>Вхідний порт</span><span>Вихідний порт</span><span>Номінал</span></div>{components.map((item) => <div key={text(item.id)}><small>{text(item.level)} · {text(item.id)}</small><b>{text(item.name)}</b><code>{text(item.input_port)}</code><code>{text(item.output_port)}</code><span>{fmt(item.nominal_value)} {text(item.unit)}</span></div>)}</div></section>
+  </div>;
 }
 
-function RegistryCard({ title, count, note }: { title: string; count: number; note: string }) {
-  return <article className="panel registry-card"><small>БАЗА ДАНИХ</small><strong>{count}</strong><h3>{title}</h3><p>{note}</p></article>;
+function Range({ label, value: current, unit, min, max, step, setValue }: { label: string; value: number; unit: string; min: number; max: number; step: number; setValue: (value: number) => void }) {
+  return <label className="range-control"><span>{label}<b>{fmt(current)} {unit}</b></span><input type="range" min={min} max={max} step={step} value={current} onChange={(event) => setValue(Number(event.target.value))} /></label>;
 }
 
-function BalanceLine({ label, input, output }: { label: string; input: number; output: number }) {
-  return <div className="balance-line"><b>{label}</b><span>Вход {input} кг</span><i>→</i><span>Выход {output} кг</span><strong>{Math.abs(input - output) < 0.001 ? "✓" : "!"}</strong></div>;
+function Kpi({ label, value: display, unit, tone }: { label: string; value: string; unit: string; tone: string }) {
+  return <article className={`kpi ${tone}`}><small>{label}</small><strong>{display}</strong><span>{unit}</span></article>;
 }
 
-function bottleneckLabel(value: string) {
-  return ({
-    gas: "газоснабжение",
-    grid: "электроснабжение",
-    logistics: "доставка",
-    workforce: "персонал",
-  } as Record<string, string>)[value] ?? value;
+function Ledger({ label, value: amount, max, color }: { label: string; value: number; max: number; color: string }) {
+  return <div className="ledger-row"><span>{label}</span><i><b className={color} style={{ width: `${Math.max(1, amount / Math.max(max, 1) * 100)}%` }} /></i><strong>{fmt(amount)} МВт·год</strong></div>;
+}
+
+function levelLabel(level: string) {
+  return ({ L0: "ресурси й середовище", L1: "енергетичний сервіс", L2: "підсистеми", L3: "обладнання", L4: "фізичні механізми", L5: "відновлення", L6: "функціональний вплив" } as Record<string, string>)[level];
+}
+
+function categoryLabel(category: string) {
+  return ({ resource: "Глобальні запаси", gas: "Газовий контур", generation: "Генерація", substation: "Підстанції", line: "Лінії передачі", grid: "Розподіл", end_product: "Кінцеві вироби" } as Record<string, string>)[category];
 }

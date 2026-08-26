@@ -130,6 +130,42 @@ const schemaStatements = [
     location_precision_m REAL, territory_id TEXT, actuality TEXT NOT NULL,
     status TEXT NOT NULL, source_id TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS lab_components (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+    level TEXT NOT NULL, parent_id TEXT, input_port TEXT NOT NULL,
+    output_port TEXT NOT NULL, nominal_value REAL, unit TEXT,
+    repairable INTEGER NOT NULL DEFAULT 1, model_version TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS lab_connections (
+    id TEXT PRIMARY KEY, source_id TEXT NOT NULL, target_id TEXT NOT NULL,
+    flow_type TEXT NOT NULL, efficiency REAL NOT NULL, sequence_no INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS lab_scenarios (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+    severity TEXT NOT NULL, description TEXT NOT NULL,
+    generation_loss REAL NOT NULL DEFAULT 0, transfer_loss REAL NOT NULL DEFAULT 0,
+    gas_loss REAL NOT NULL DEFAULT 0, voltage_stress REAL NOT NULL DEFAULT 0,
+    scada_available INTEGER NOT NULL DEFAULT 1,
+    system_separation INTEGER NOT NULL DEFAULT 0,
+    black_start_required INTEGER NOT NULL DEFAULT 0,
+    damaged_assets INTEGER NOT NULL DEFAULT 0,
+    hazard_delay_hours REAL NOT NULL DEFAULT 0, repair_hours REAL NOT NULL DEFAULT 0,
+    transformer_spares INTEGER NOT NULL DEFAULT 0, line_kits INTEGER NOT NULL DEFAULT 0,
+    repeat_damage INTEGER NOT NULL DEFAULT 0,
+    source_name TEXT NOT NULL, source_url TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS lab_inventory_pools (
+    id TEXT PRIMARY KEY, part_class TEXT NOT NULL, available INTEGER NOT NULL,
+    reserved INTEGER NOT NULL DEFAULT 0, repairable INTEGER NOT NULL DEFAULT 0,
+    external_available INTEGER NOT NULL DEFAULT 0, lead_time_hours REAL NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS lab_crew_pools (
+    id TEXT PRIMARY KEY, crew_type TEXT NOT NULL, available INTEGER NOT NULL,
+    qualifications TEXT NOT NULL, mobilization_hours REAL NOT NULL,
+    shift_hours REAL NOT NULL, external_pool INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_lab_components_parent ON lab_components(parent_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_lab_scenarios_category ON lab_scenarios(category)`,
 ];
 
 const seedStatements = [
@@ -254,6 +290,67 @@ const seedStatements = [
     ('territory-moscow-demo','Москва','abstract_metropolitan_area','RU',55.7558,37.6176,'approximate_centroid',13000000,0.15,'modelled_demo','src-orb')`,
   `INSERT OR IGNORE INTO real_systems VALUES
     ('real-grid-moscow-demo','Агрегований енергетичний вузол Москви','distribution_region','system-distribution-grid',55.7558,37.6176,25000,'territory-moscow-demo','modelled_demo','planned','src-orb')`,
+  `INSERT OR IGNORE INTO lab_components VALUES
+    ('resource-gas','Запас природного газу','resource','L0',NULL,'stock.reservoir','material.raw_gas',1000000,'MWh',0,'model-lab-v0.3'),
+    ('gas-production','Видобувний модуль','gas','L2','resource-gas','material.reservoir_gas','material.wet_gas',1000,'MWh/h',1,'model-lab-v0.3'),
+    ('well','Свердловина і гирло','gas','L3','gas-production','material.reservoir_gas','material.wet_gas',1000,'MWh/h',1,'model-lab-v0.3'),
+    ('separator','Сепарація газ/вода/конденсат','gas','L3','gas-production','material.wet_gas','material.separated_gas',980,'MWh/h',1,'model-lab-v0.3'),
+    ('dehydration','Осушення та очищення','gas','L3','gas-production','material.separated_gas','material.pipeline_gas',970,'MWh/h',1,'model-lab-v0.3'),
+    ('gas-compressor','Компресорна станція','gas','L3','gas-production','material.pipeline_gas','material.pressurized_gas',960,'MWh/h',1,'model-lab-v0.3'),
+    ('gas-pipeline','Магістральний газопровід і linepack','gas','L2',NULL,'material.pressurized_gas','material.delivered_gas',950,'MWh/h',1,'model-lab-v0.3'),
+    ('steam-plant','Газова парова ТЕС','generation','L2',NULL,'material.delivered_gas','energy.electricity',360,'MW',1,'model-lab-v0.3'),
+    ('fuel-train','Газовий тракт і пальники','generation','L3','steam-plant','material.delivered_gas','energy.thermal',900,'MWh/h',1,'model-lab-v0.3'),
+    ('boiler','Котел, економайзер і пароперегрівач','generation','L3','steam-plant','energy.thermal','energy.steam',810,'MWh/h',1,'model-lab-v0.3'),
+    ('steam-turbine','Парова турбіна і конденсатор','generation','L3','steam-plant','energy.steam','energy.mechanical',324,'MWh/h',1,'model-lab-v0.3'),
+    ('generator','Синхронний генератор','generation','L3','steam-plant','energy.mechanical','energy.electricity',318,'MWh/h',1,'model-lab-v0.3'),
+    ('switchyard','Станційна підвищувальна підстанція','substation','L2',NULL,'energy.electricity','energy.hv',350,'MW',1,'model-lab-v0.3'),
+    ('hv-transformer','Силовий трансформатор і вводи','substation','L3','switchyard','energy.electricity','energy.hv',350,'MW',1,'model-lab-v0.3'),
+    ('hv-line','Магістральна ЛЕП','line','L2',NULL,'energy.hv','energy.hv_delivered',360,'MW',1,'model-lab-v0.3'),
+    ('grid-substation','Вузлова підстанція AIS/GIS','substation','L2',NULL,'energy.hv_delivered','energy.mv',340,'MW',1,'model-lab-v0.3'),
+    ('distribution','Мережа СН і НН','grid','L2',NULL,'energy.mv','energy.socket',320,'MW',1,'model-lab-v0.3'),
+    ('refrigerator','Холодильник','end_product','L3',NULL,'energy.socket','thermal.room',0.15,'kW',1,'model-lab-v0.3'),
+    ('led','LED-лампа','end_product','L3',NULL,'energy.socket','radiation.visible',0.01,'kW',1,'model-lab-v0.3')`,
+  `INSERT OR IGNORE INTO lab_connections VALUES
+    ('lc-01','resource-gas','gas-production','material',1,1),
+    ('lc-02','gas-production','gas-pipeline','material',0.98,2),
+    ('lc-03','gas-pipeline','steam-plant','material',0.985,3),
+    ('lc-04','steam-plant','switchyard','energy',0.94,4),
+    ('lc-05','switchyard','hv-line','energy',0.985,5),
+    ('lc-06','hv-line','grid-substation','energy',0.96,6),
+    ('lc-07','grid-substation','distribution','energy',0.97,7),
+    ('lc-08','distribution','refrigerator','energy',0.96,8),
+    ('lc-09','distribution','led','energy',0.96,9)`,
+  `INSERT OR IGNORE INTO lab_scenarios VALUES
+    ('baseline','Штатний режим','baseline','normal','Повний фізичний цикл без аварій',0,0,0,0,1,0,0,0,0,0,0,0,0,'Model Lab baseline','about:blank'),
+    ('n-1-transformer','N-1: силовий трансформатор','substation','warning','Один трансформатор відключений, резерв приймає навантаження',0,0.12,0,0.08,1,0,0,1,0,8,1,0,0,'N-1 qualification','about:blank'),
+    ('north-hyde','Пожежа магістральної підстанції','substation','critical','Пробій вводу, пожежа трансформатора і втрата секцій шин',0,0.62,0,0.45,1,0,0,3,5,72,2,1,0,'NESO North Hyde 2025','https://www.neso.energy/document/363891/download'),
+    ('line-ice','Обмерзання та обриви ЛЕП','line','critical','Спільна погодна причина пошкоджує кілька повітряних ліній',0,0.48,0,0.28,1,1,0,7,3,28,0,8,0,'Storm Arwen review','https://www.gov.uk/government/publications/storm-arwen-electricity-distribution-disruption-review'),
+    ('ua-md-2026','Міжсистемне відключення 31.01.2026','system','critical','Кілька міжсистемних ліній відключаються, область відділяється і ресинхронізується',0.18,0.44,0,0.3,1,1,0,4,0.3,0.4,0,0,0,'ENTSO-E Ukraine Moldova 2026','https://www.entsoe.eu/news/2026/02/05/power-system-incident-in-ukraine-and-moldova/'),
+    ('iberia-2025','Напруговий каскад','system','black','Осциляції, дефіцит реактивної підтримки і каскадне відключення генерації',0.86,0.7,0,1,1,1,1,8,0.5,18,0,0,0,'ENTSO-E Iberian blackout 2025','https://www.entsoe.eu/news/2026/03/20/entso-e-publishes-expert-panel-final-report-on-28-april-2025-blackout-in-spain-and-portugal/'),
+    ('sa-2016','Множинні пошкодження ЛЕП','system','black','Кілька провалів напруги, відключення генерації та втрата інтерконектора',0.72,0.85,0,0.8,1,1,1,9,6,36,0,10,0,'AEMO South Australia 2016','https://www.aemo.com.au/-/media/files/electricity/nem/market_notices_and_events/power_system_incident_reports/2017/integrated-final-report-sa-black-system-28-september-2016.pdf'),
+    ('hokkaido-2018','Втрата концентрованої генерації','generation','black','Втрата найбільшого генеруючого вузла спричиняє частотний колапс',0.92,0.15,0,0.2,1,1,1,4,1,22,0,0,0,'METI Hokkaido 2018','https://www.enecho.meti.go.jp/about/special/johoteikyo/blackout.html'),
+    ('india-2012','Перевантаження коридорів','system','black','Ключова лінія відключається при перевантажених коридорах і запускає каскад',0.34,0.78,0,0.55,1,1,1,6,0.5,20,1,4,0,'CERC India 2012','https://www.cercind.gov.in/2012/orders/Final_Report_Grid_Disturbance.pdf'),
+    ('texas-2021','Газо-електрична холодова аварія','cross-sector','black','Мороз зменшує видобуток газу, виводить генерацію і компресори',0.58,0.18,0.54,0.2,1,1,1,12,8,80,1,5,0,'FERC NERC Texas 2021','https://www.ferc.gov/sites/default/files/2021-12/Cold%20Weather%20Report_%202021_120821.pdf'),
+    ('external-generation','Зовнішнє пошкодження генерації','external_damage','critical','Абстрактна одночасна втрата кількох генеруючих блоків',0.7,0.08,0,0.18,1,0,0,5,12,140,1,0,1,'OHCHR energy infrastructure profile','https://ukraine.ohchr.org/en/Attacks-on-Ukraines-Energy-Infrastructure-Harm-to-the-Civilian-Population'),
+    ('external-grid','Зовнішнє пошкодження генерації та мережі','external_damage','black','Абстрактне повторне пошкодження генерації, підстанцій і ЛЕП',0.62,0.68,0.08,0.75,0,1,1,14,24,220,4,12,1,'OHCHR energy infrastructure profile','https://ukraine.ohchr.org/en/Attacks-against-Ukraine-s-energy-infrastructure-and-update-on-the-human-rights-situation-in-Ukraine-1-December-2025-31-May-2026'),
+    ('scada-loss','Втрата SCADA і телекомунікацій','control','critical','Фізичні активи частково справні, але дистанційне керування недоступне',0.12,0.18,0,0.22,0,0,0,2,0,14,0,0,0,'Model Lab control scenario','about:blank'),
+    ('inventory-exhaustion','Виснаження аварійного запасу','recovery','critical','Потреба у трансформаторах і лінійних комплектах перевищує локальний пул',0.1,0.64,0,0.35,1,1,0,16,4,120,6,14,0,'DOE mutual assistance profile','https://www.energy.gov/sites/default/files/2023-12/Mutual%20Assistance%20Drop-in_FINAL_508%20%281%29.pdf')`,
+  `INSERT OR IGNORE INTO lab_inventory_pools VALUES
+    ('inv-transformer','Силовий трансформатор',2,0,1,4,96),
+    ('inv-bushing','Трансформаторний ввід',6,0,2,8,24),
+    ('inv-breaker','Вимикач',5,0,1,6,36),
+    ('inv-relay','Реле захисту',12,0,3,20,8),
+    ('inv-insulator','Ізоляторний комплект',24,0,0,50,6),
+    ('inv-line-kit','Комплект ремонту ЛЕП',6,0,2,18,12),
+    ('inv-telecom','Комплект телекомунікацій',4,0,1,10,10),
+    ('inv-mobile-substation','Мобільна підстанція',1,0,0,2,72)`,
+  `INSERT OR IGNORE INTO lab_crew_pools VALUES
+    ('crew-ops','Оперативно-виїзна',3,'switching,diagnostics,safety',2,12,0),
+    ('crew-substation','Підстанційна',2,'transformer,busbar,breaker,fire-safety',4,12,0),
+    ('crew-line','Лінійна',4,'overhead-line,tower,insulator',3,12,0),
+    ('crew-relay','Релейного захисту',2,'protection,scada,commissioning',3,10,0),
+    ('crew-test','Високовольтних випробувань',1,'hv-test,synchronization',5,10,0),
+    ('crew-mutual','Зовнішня взаємодопомога',8,'mixed-restoration',18,12,1)`,
 ];
 
 async function ensureDatabase() {
@@ -275,7 +372,7 @@ export type WorldSnapshot = Awaited<ReturnType<typeof getWorldSnapshot>>;
 
 export async function getWorldSnapshot() {
   const db = await ensureDatabase();
-  const [entities, relations, facilities, capabilities, dependencies, events, postings, scenarios, runs, sources, externalIdentities, processModels, processFlows, inventoryLots, transportRoutes, circuitRuns, interventions, technologies, principleSystems, endProducts, testModels, testModelComponents, territorialUnits, realSystems] =
+  const [entities, relations, facilities, capabilities, dependencies, events, postings, scenarios, runs, sources, externalIdentities, processModels, processFlows, inventoryLots, transportRoutes, circuitRuns, interventions, technologies, principleSystems, endProducts, testModels, testModelComponents, territorialUnits, realSystems, labComponents, labConnections, labScenarios, labInventoryPools, labCrewPools] =
     await Promise.all([
       all(db, "SELECT * FROM entities ORDER BY level, name"),
       all(db, "SELECT * FROM relations ORDER BY predicate"),
@@ -311,6 +408,11 @@ export async function getWorldSnapshot() {
       all(db, "SELECT * FROM test_model_components ORDER BY test_model_id, sequence_no"),
       all(db, "SELECT * FROM territorial_units ORDER BY name"),
       all(db, "SELECT * FROM real_systems ORDER BY name"),
+      all(db, "SELECT * FROM lab_components ORDER BY level, category, name"),
+      all(db, "SELECT * FROM lab_connections ORDER BY sequence_no"),
+      all(db, "SELECT * FROM lab_scenarios ORDER BY category, name"),
+      all(db, "SELECT * FROM lab_inventory_pools ORDER BY part_class"),
+      all(db, "SELECT * FROM lab_crew_pools ORDER BY external_pool, crew_type"),
     ]);
 
   return {
@@ -339,5 +441,10 @@ export async function getWorldSnapshot() {
     testModelComponents,
     territorialUnits,
     realSystems,
+    labComponents,
+    labConnections,
+    labScenarios,
+    labInventoryPools,
+    labCrewPools,
   };
 }

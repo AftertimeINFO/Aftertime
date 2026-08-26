@@ -1,4 +1,4 @@
-import { index, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const entities = sqliteTable("entities", {
   id: text("id").primaryKey(),
@@ -224,4 +224,70 @@ export const interventions = sqliteTable("interventions", {
   unit: text("unit").notNull(),
   status: text("status").notNull(),
   rationale: text("rationale").notNull(),
+});
+
+export const labComponents = sqliteTable("lab_components", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  level: text("level").notNull(),
+  parentId: text("parent_id"),
+  inputPort: text("input_port").notNull(),
+  outputPort: text("output_port").notNull(),
+  nominalValue: real("nominal_value"),
+  unit: text("unit"),
+  repairable: integer("repairable").notNull().default(1),
+  modelVersion: text("model_version").notNull(),
+}, (table) => [index("idx_lab_components_parent").on(table.parentId)]);
+
+export const labConnections = sqliteTable("lab_connections", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull(),
+  targetId: text("target_id").notNull(),
+  flowType: text("flow_type").notNull(),
+  efficiency: real("efficiency").notNull(),
+  sequenceNo: integer("sequence_no").notNull(),
+});
+
+export const labScenarios = sqliteTable("lab_scenarios", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  severity: text("severity").notNull(),
+  description: text("description").notNull(),
+  generationLoss: real("generation_loss").notNull().default(0),
+  transferLoss: real("transfer_loss").notNull().default(0),
+  gasLoss: real("gas_loss").notNull().default(0),
+  voltageStress: real("voltage_stress").notNull().default(0),
+  scadaAvailable: integer("scada_available").notNull().default(1),
+  systemSeparation: integer("system_separation").notNull().default(0),
+  blackStartRequired: integer("black_start_required").notNull().default(0),
+  damagedAssets: integer("damaged_assets").notNull().default(0),
+  hazardDelayHours: real("hazard_delay_hours").notNull().default(0),
+  repairHours: real("repair_hours").notNull().default(0),
+  transformerSpares: integer("transformer_spares").notNull().default(0),
+  lineKits: integer("line_kits").notNull().default(0),
+  repeatDamage: integer("repeat_damage").notNull().default(0),
+  sourceName: text("source_name").notNull(),
+  sourceUrl: text("source_url").notNull(),
+}, (table) => [index("idx_lab_scenarios_category").on(table.category)]);
+
+export const labInventoryPools = sqliteTable("lab_inventory_pools", {
+  id: text("id").primaryKey(),
+  partClass: text("part_class").notNull(),
+  available: integer("available").notNull(),
+  reserved: integer("reserved").notNull().default(0),
+  repairable: integer("repairable").notNull().default(0),
+  externalAvailable: integer("external_available").notNull().default(0),
+  leadTimeHours: real("lead_time_hours").notNull(),
+});
+
+export const labCrewPools = sqliteTable("lab_crew_pools", {
+  id: text("id").primaryKey(),
+  crewType: text("crew_type").notNull(),
+  available: integer("available").notNull(),
+  qualifications: text("qualifications").notNull(),
+  mobilizationHours: real("mobilization_hours").notNull(),
+  shiftHours: real("shift_hours").notNull(),
+  externalPool: integer("external_pool").notNull().default(0),
 });
