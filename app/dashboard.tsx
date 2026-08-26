@@ -4,11 +4,12 @@ import { useMemo, useState } from "react";
 import type { WorldSnapshot } from "../db/world";
 import { baseCircuitInputs, simulateAmmoniaCircuit } from "../db/simulator";
 
-type View = "overview" | "network" | "ledger" | "lab" | "scenarios" | "sources";
+type View = "overview" | "power" | "network" | "ledger" | "lab" | "scenarios" | "sources";
 type Row = Record<string, string | number | null>;
 
 const labels: Record<View, string> = {
   overview: "Состояние",
+  power: "Електромережа",
   network: "Сеть возможностей",
   ledger: "Журнал",
   lab: "Лаборатория",
@@ -18,6 +19,7 @@ const labels: Record<View, string> = {
 
 const icons: Record<View, string> = {
   overview: "◉",
+  power: "ϟ",
   network: "⌘",
   ledger: "≡",
   lab: "⚗",
@@ -36,6 +38,9 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
   const [targetKg, setTargetKg] = useState(1000);
   const [gasOverride, setGasOverride] = useState<number | null>(null);
   const [logisticsOverride, setLogisticsOverride] = useState<number | null>(null);
+  const [fuelEnergyKwh, setFuelEnergyKwh] = useState(100);
+  const [fridgeCount, setFridgeCount] = useState(100);
+  const [ledCount, setLedCount] = useState(1000);
 
   const scenario = snapshot.scenarios.find((item) => item.id === scenarioId) ?? snapshot.scenarios[0];
   const run = snapshot.runs.find((item) => item.scenario_id === scenario?.id) ?? snapshot.runs[0];
@@ -58,6 +63,7 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
 
   const title = useMemo(() => {
     if (view === "overview") return "Азотный контур Украины";
+    if (view === "power") return "Електроенергія: від генерації до споживання";
     if (view === "network") return "Причинная сеть производства";
     if (view === "ledger") return "Трансформации материи и энергии";
     if (view === "lab") return "Контур одной тонны аммиака";
@@ -74,6 +80,46 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
     workforceAvailability: n(scenario?.workforce_availability),
   }), [targetKg, gasOverride, logisticsOverride, scenario]);
 
+  const power = useMemo(() => {
+    const thermalEnergy = fuelEnergyKwh * 0.90;
+    const mechanicalEnergy = thermalEnergy * 0.40;
+    const generatedPotential = mechanicalEnergy * 0.98;
+    const highVoltage = generatedPotential * 0.985;
+    const receivingSubstation = highVoltage * 0.96;
+    const mediumVoltage = receivingSubstation * 0.985;
+    const distributedPotential = mediumVoltage * 0.95;
+    const socketPotential = distributedPotential * 0.98 * 0.96;
+    const fridgeDemand = fridgeCount * 0.15;
+    const ledDemand = ledCount * 0.01;
+    const demand = fridgeDemand + ledDemand;
+    const served = Math.min(socketPotential, demand);
+    const serviceRatio = demand > 0 ? served / demand : 1;
+    const fridgeElectricity = fridgeDemand * serviceRatio;
+    const ledElectricity = ledDemand * serviceRatio;
+    return {
+      thermalEnergy,
+      mechanicalEnergy,
+      generatedPotential,
+      highVoltage,
+      receivingSubstation,
+      mediumVoltage,
+      distributedPotential,
+      socketPotential,
+      demand,
+      served,
+      surplus: Math.max(0, socketPotential - demand),
+      shortfall: Math.max(0, demand - socketPotential),
+      fridgeElectricity,
+      fridgeHeatRemoved: fridgeElectricity * 3,
+      fridgeHeatToRoom: fridgeElectricity * 4,
+      ledElectricity,
+      ledWaves: ledElectricity * 0.35,
+      ledHeat: ledElectricity * 0.65,
+      losses: fuelEnergyKwh - socketPotential,
+      efficiency: socketPotential / fuelEnergyKwh,
+    };
+  }, [fuelEnergyKwh, fridgeCount, ledCount]);
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -82,8 +128,8 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
           <span><b>ORB</b><small>WORLD MODEL / UA</small></span>
         </button>
         <div className="product-switch">
-          <button className="active">N-КОНТУР</button>
-          <button title="Следующий контур модели">МИР +</button>
+          <button className={view === "power" ? "" : "active"} onClick={() => setView("overview")}>N-КОНТУР</button>
+          <button className={view === "power" ? "active" : ""} onClick={() => setView("power")}>E-КОНТУР</button>
         </div>
         <nav aria-label="Разделы модели">
           {(Object.keys(labels) as View[]).map((key) => (
@@ -100,12 +146,12 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">ПИЛОТ · АЗОТ → АММИАК → УРОЖАЙ</p><h1>{title}</h1></div>
+          <div><p className="eyebrow">{view === "power" ? "ПІЛОТ · ГЕНЕРАЦІЯ → МЕРЕЖА → СПОЖИВАЧІ" : "ПИЛОТ · АЗОТ → АММИАК → УРОЖАЙ"}</p><h1>{title}</h1></div>
           <div className="top-actions">
-            <label className="sr-only" htmlFor="scenario">Сценарий</label>
-            <select id="scenario" value={scenarioId} onChange={(event) => setScenarioId(event.target.value)}>
-              {snapshot.scenarios.map((item) => <option key={String(item.id)} value={String(item.id)}>{item.name}</option>)}
-            </select>
+            {view !== "power" && <><label className="sr-only" htmlFor="scenario">Сценарий</label>
+              <select id="scenario" value={scenarioId} onChange={(event) => setScenarioId(event.target.value)}>
+                {snapshot.scenarios.map((item) => <option key={String(item.id)} value={String(item.id)}>{item.name}</option>)}
+              </select></>}
             <button className="avatar" title="Режим планировщика">PLN</button>
           </div>
         </header>
@@ -137,6 +183,76 @@ export default function Dashboard({ snapshot }: { snapshot: WorldSnapshot }) {
               <div className="dependency-bars">
                 {snapshot.dependencies.map((item) => <Dependency key={String(item.id)} item={item} />)}
               </div>
+            </section>
+          </div>
+        )}
+
+        {view === "power" && (
+          <div className="content power-content">
+            <section className="power-hero">
+              <div>
+                <p className="section-label">ТЕСТОВА МОДЕЛЬ · 1 ГОДИНА · {snapshot.testModels[0]?.model_version}</p>
+                <h2>{fmt(power.socketPotential)} <span>кВт·год потенціалу в кінцевій мережі</span></h2>
+                <p>Паливо проходить послідовні перетворення на тепло, механічне обертання та електричний потенціал. Після передачі мережею холодильник змінює температурний баланс, а LED-лампа створює електромагнітні хвилі.</p>
+              </div>
+              <div className={`power-efficiency ${power.shortfall > 0 ? "limited" : ""}`}><small>СТАН ТЕСТУ</small><strong>{power.shortfall > 0 ? "ДЕФІЦИТ" : "ПРАЦЮЄ"}</strong><span>{power.shortfall > 0 ? `не вистачає ${fmt(power.shortfall)} кВт·год` : `резерв ${fmt(power.surplus)} кВт·год`}</span></div>
+            </section>
+
+            <section className="panel power-controls">
+              <label>Енергія палива <b>{fmt(fuelEnergyKwh)} кВт·год</b><input type="range" min="20" max="500" step="10" value={fuelEnergyKwh} onChange={(event) => setFuelEnergyKwh(Number(event.target.value))} /></label>
+              <label>Холодильники <b>{fridgeCount} шт.</b><input type="range" min="0" max="300" step="10" value={fridgeCount} onChange={(event) => setFridgeCount(Number(event.target.value))} /></label>
+              <label>LED-лампи <b>{ledCount} шт.</b><input type="range" min="0" max="3000" step="100" value={ledCount} onChange={(event) => setLedCount(Number(event.target.value))} /></label>
+            </section>
+
+            <section className="registry-grid" aria-label="Бази даних моделі">
+              <RegistryCard title="Технології" count={snapshot.technologies.length} note="перетворення й коефіцієнти" />
+              <RegistryCard title="Принципові системи" count={snapshot.principleSystems.length} note="складені функціональні контури" />
+              <RegistryCard title="Кінцеві вироби" count={snapshot.endProducts.length} note="споживачі та корисні ефекти" />
+              <RegistryCard title="Тестові моделі" count={snapshot.testModels.length} note={`${snapshot.testModelComponents.length} зібраних компонентів`} />
+              <RegistryCard title="Реальні системи" count={snapshot.realSystems.length} note="точні й приблизні геоприв’язки" />
+              <RegistryCard title="Територіальні одиниці" count={snapshot.territorialUnits.length} note="агреговані користувачі та невизначеність" />
+            </section>
+
+            <section className="panel power-model" aria-label="Схема передачі електроенергії">
+              <div className="power-backbone">
+                <PowerNode code="01 · РЕСУРС" title="Паливо" value={`${fmt(fuelEnergyKwh)} кВт·год`} note="Хімічна енергія · вхід із матеріального балансу" tone="source" />
+                <PowerLink label="90%" />
+                <PowerNode code="02 · ТЕПЛО" title="Котел / реактор" value={`${fmt(power.thermalEnergy)} кВт·год`} note="Спалювання палива → теплова енергія" />
+                <PowerLink label="40%" />
+                <PowerNode code="03 · РОБОТА" title="Парова турбіна" value={`${fmt(power.mechanicalEnergy)} кВт·год`} note="Тепло → механічне обертання вала" />
+                <PowerLink label="98%" />
+                <PowerNode code="04 · ПОТЕНЦІАЛ" title="Генератор" value={`${fmt(power.generatedPotential)} кВт·год`} note="Обертання → електричний потенціал 11–24 кВ" />
+                <PowerLink label="−1,5%" />
+                <PowerNode code="05 · ПІДВИЩЕННЯ" title="Трансформатор" value={`${fmt(power.highVoltage)} кВт·год`} note="Підвищення до 110–750 кВ" />
+                <PowerLink label="−4%" />
+                <PowerNode code="06 · ПЕРЕДАЧА" title="Магістральна ЛЕП" value={`${fmt(power.receivingSubstation)} кВт·год`} note="Передача електричного потенціалу на відстань" />
+                <PowerLink label="−1,5%" />
+                <PowerNode code="07 · ПІДСТАНЦІЯ" title="Приймальна підстанція" value={`${fmt(power.mediumVoltage)} кВт·год`} note="Комутація, захист і зниження напруги" />
+                <PowerLink label="−5%" />
+                <PowerNode code="08 · РОЗПОДІЛ" title="Мережа 6–35 кВ" value={`${fmt(power.distributedPotential)} кВт·год`} note="Розподіл до локального трансформатора" />
+              </div>
+
+              <div className="power-split"><span>ТРАНСФОРМАТОР 0,4 КВ + НИЗЬКОВОЛЬТНА МЕРЕЖА · {fmt(power.socketPotential)} КВТ·ГОД ДОСТУПНО</span></div>
+
+              <div className="consumer-grid">
+                <article className="consumer-path">
+                  <div className="branch-line"><span>{fmt(power.fridgeElectricity)} кВт·год</span></div>
+                  <PowerNode code="09A · КІНЦЕВИЙ ВИРІБ" title={`${fridgeCount} × холодильник`} value="COP 3,0" note="Потенціал → компресор → зміна балансу температури" />
+                  <div className="consumer-card civil"><small>ТЕМПЕРАТУРНИЙ БАЛАНС</small><strong>−{fmt(power.fridgeHeatRemoved)} кВт·год</strong><p>Відведено з камер; {fmt(power.fridgeHeatToRoom)} кВт·год тепла передано приміщенню</p></div>
+                </article>
+                <article className="consumer-path">
+                  <div className="branch-line"><span>{fmt(power.ledElectricity)} кВт·год</span></div>
+                  <PowerNode code="09B · КІНЦЕВИЙ ВИРІБ" title={`${ledCount} × LED-лампа`} value="35% → хвилі" note="Потенціал → електромагнітні хвилі + тепло" />
+                  <div className="consumer-card industry"><small>ЕЛЕКТРОМАГНІТНЕ ВИПРОМІНЮВАННЯ</small><strong>{fmt(power.ledWaves)} кВт·год</strong><p>У хвилях; {fmt(power.ledHeat)} кВт·год розсіяно як тепло</p></div>
+                </article>
+              </div>
+            </section>
+
+            <section className="power-balance-grid">
+              <article className="panel"><small>ХІМІЧНА ЕНЕРГІЯ ПАЛИВА</small><strong>{fmt(fuelEnergyKwh)}</strong><span>кВт·год на вході</span></article>
+              <article className="panel"><small>ПОТЕНЦІАЛ У РОЗЕТЦІ</small><strong>{fmt(power.socketPotential)}</strong><span>кВт·год після всіх ланок</span></article>
+              <article className="panel"><small>ПОПИТ ВИРОБІВ</small><strong>{fmt(power.demand)}</strong><span>кВт·год за одну годину</span></article>
+              <article className="panel balance-ok"><small>СУМІСНА РОБОТА</small><strong>{power.shortfall > 0 ? "ОБМЕЖЕНА" : "СТАБІЛЬНА"}</strong><span>спожито {fmt(power.served)} кВт·год</span></article>
             </section>
           </div>
         )}
@@ -302,6 +418,18 @@ function Meter({ label, value }: { label: string; value: unknown }) {
 
 function CircuitNode({ phase, title, value, note, good = false }: { phase: string; title: string; value: string; note: string; good?: boolean }) {
   return <article className={`circuit-node ${good ? "complete" : ""}`}><small>{phase}</small><h3>{title}</h3><b>{value}</b><p>{note}</p></article>;
+}
+
+function PowerNode({ code, title, value, note, tone = "" }: { code: string; title: string; value: string; note: string; tone?: string }) {
+  return <article className={`power-node ${tone}`}><small>{code}</small><h3>{title}</h3><b>{value}</b><p>{note}</p></article>;
+}
+
+function PowerLink({ label }: { label: string }) {
+  return <div className="power-link" aria-label={`Втрати ${label}`}><i /><span>{label}</span><b>→</b></div>;
+}
+
+function RegistryCard({ title, count, note }: { title: string; count: number; note: string }) {
+  return <article className="panel registry-card"><small>БАЗА ДАНИХ</small><strong>{count}</strong><h3>{title}</h3><p>{note}</p></article>;
 }
 
 function BalanceLine({ label, input, output }: { label: string; input: number; output: number }) {

@@ -94,6 +94,42 @@ const schemaStatements = [
     recovered_quantity REAL NOT NULL, unit TEXT NOT NULL, status TEXT NOT NULL,
     rationale TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS technologies (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+    input_form TEXT NOT NULL, output_form TEXT NOT NULL, efficiency REAL NOT NULL,
+    useful_effect TEXT NOT NULL, waste_effect TEXT NOT NULL, model_version TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS principle_systems (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, system_type TEXT NOT NULL,
+    purpose TEXT NOT NULL, input_form TEXT NOT NULL, output_form TEXT NOT NULL,
+    model_version TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS end_products (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, product_type TEXT NOT NULL,
+    rated_power_kw REAL NOT NULL, transformation TEXT NOT NULL,
+    useful_output TEXT NOT NULL, waste_output TEXT NOT NULL, coefficient REAL NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS test_models (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL,
+    status TEXT NOT NULL, duration_hours REAL NOT NULL, model_version TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS test_model_components (
+    id TEXT PRIMARY KEY, test_model_id TEXT NOT NULL, component_kind TEXT NOT NULL,
+    component_id TEXT NOT NULL, sequence_no INTEGER NOT NULL, branch TEXT NOT NULL,
+    quantity REAL NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS territorial_units (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, unit_type TEXT NOT NULL,
+    country_code TEXT, centroid_lat REAL, centroid_lon REAL,
+    location_precision TEXT NOT NULL, estimated_users INTEGER,
+    user_count_uncertainty REAL, epistemic_status TEXT NOT NULL, source_id TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS real_systems (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, system_type TEXT NOT NULL,
+    principle_system_id TEXT NOT NULL, latitude REAL, longitude REAL,
+    location_precision_m REAL, territory_id TEXT, actuality TEXT NOT NULL,
+    status TEXT NOT NULL, source_id TEXT NOT NULL
+  )`,
 ];
 
 const seedStatements = [
@@ -183,6 +219,41 @@ const seedStatements = [
     ('circuit-base-001','scenario-stress','ammonia-circuit-v0.2',1000,420,374,466,'kg NH3','logistics',0.637,42.9,0,'2026-07-29T12:00:00Z')`,
   `INSERT OR IGNORE INTO interventions VALUES
     ('intervention-road-001','circuit-base-001','Перенаправить партию через автомобильный терминал','route-cherkasy-poltava-road',12,440,'kg NH3','recommended','Автомобильный маршрут восстанавливает доступность доставки с 42% до 86%')`,
+  `INSERT OR IGNORE INTO technologies VALUES
+    ('tech-combustion','Спалювання палива','energy_conversion','chemical_energy','thermal_energy',0.90,'Тепло робочого тіла','Димові гази та розсіяне тепло','power-circuit-v0.1'),
+    ('tech-steam-turbine','Парова турбіна','energy_conversion','thermal_energy','mechanical_rotation',0.40,'Обертання вала','Низькопотенційне тепло','power-circuit-v0.1'),
+    ('tech-generator','Синхронний генератор','energy_conversion','mechanical_rotation','electric_potential',0.98,'Електричний потенціал','Нагрів обмоток і тертя','power-circuit-v0.1'),
+    ('tech-step-up','Підвищувальний трансформатор','voltage_conversion','electric_potential_lv','electric_potential_hv',0.985,'Висока напруга','Тепло в осерді й обмотках','power-circuit-v0.1'),
+    ('tech-hv-line','Магістральна ЛЕП','energy_transfer','electric_potential_hv','electric_potential_hv',0.96,'Переданий потенціал','Джоулеве тепло та коронні втрати','power-circuit-v0.1'),
+    ('tech-substation','Приймальна підстанція','voltage_conversion','electric_potential_hv','electric_potential_mv',0.985,'Потенціал середньої напруги','Тепло й власні потреби','power-circuit-v0.1'),
+    ('tech-mv-grid','Мережа середньої напруги','energy_transfer','electric_potential_mv','electric_potential_mv',0.95,'Розподілений потенціал','Джоулеве тепло','power-circuit-v0.1'),
+    ('tech-distribution-transformer','Розподільчий трансформатор','voltage_conversion','electric_potential_mv','electric_potential_lv',0.98,'Потенціал 0,4 кВ','Тепло в осерді й обмотках','power-circuit-v0.1'),
+    ('tech-lv-grid','Низьковольтна мережа','energy_transfer','electric_potential_lv','electric_potential_socket',0.96,'Потенціал у розетці','Джоулеве тепло','power-circuit-v0.1'),
+    ('tech-refrigeration','Компресійний холодильний цикл','temperature_control','electric_potential','temperature_gradient',3.0,'Відведення тепла з холодильної камери','Тепло в приміщення','power-circuit-v0.1'),
+    ('tech-led','Світлодіодна електролюмінесценція','radiation_conversion','electric_potential','electromagnetic_waves',0.35,'Видиме електромагнітне випромінювання','Тепло','power-circuit-v0.1')`,
+  `INSERT OR IGNORE INTO principle_systems VALUES
+    ('system-thermal-power-plant','Теплова електростанція','generation','Прийняти паливо та створити електричний потенціал','fuel','electric_potential', 'power-circuit-v0.1'),
+    ('system-transmission-grid','Система передачі','transmission','Підвищити напругу і передати потенціал на відстань','electric_potential_lv','electric_potential_hv','power-circuit-v0.1'),
+    ('system-distribution-grid','Система розподілу','distribution','Знизити напругу та доставити потенціал споживачу','electric_potential_hv','electric_potential_socket','power-circuit-v0.1')`,
+  `INSERT OR IGNORE INTO end_products VALUES
+    ('product-fridge','Холодильник','civil_appliance',0.15,'Електричний потенціал → робота компресора → градієнт температури','Відведене тепло з камери','Електроенергія та відведене тепло у приміщенні',3.0),
+    ('product-led','LED-лампа','civil_appliance',0.01,'Електричний потенціал → електромагнітні хвилі + тепло','Видиме випромінювання','Тепло',0.35)`,
+  `INSERT OR IGNORE INTO test_models VALUES
+    ('test-power-home-001','ТЕС → будинок: холодильник + LED','Одногодинний тест сумісної роботи генерації, мережі та двох кінцевих виробів','active',1,'power-circuit-v0.1')`,
+  `INSERT OR IGNORE INTO test_model_components VALUES
+    ('tmc-01','test-power-home-001','principle_system','system-thermal-power-plant',1,'main',1),
+    ('tmc-02','test-power-home-001','technology','tech-step-up',2,'main',1),
+    ('tmc-03','test-power-home-001','technology','tech-hv-line',3,'main',1),
+    ('tmc-04','test-power-home-001','technology','tech-substation',4,'main',1),
+    ('tmc-05','test-power-home-001','technology','tech-mv-grid',5,'main',1),
+    ('tmc-06','test-power-home-001','technology','tech-distribution-transformer',6,'civil',1),
+    ('tmc-07','test-power-home-001','technology','tech-lv-grid',7,'civil',1),
+    ('tmc-08','test-power-home-001','end_product','product-fridge',8,'civil',100),
+    ('tmc-09','test-power-home-001','end_product','product-led',9,'civil',1000)`,
+  `INSERT OR IGNORE INTO territorial_units VALUES
+    ('territory-moscow-demo','Москва','abstract_metropolitan_area','RU',55.7558,37.6176,'approximate_centroid',13000000,0.15,'modelled_demo','src-orb')`,
+  `INSERT OR IGNORE INTO real_systems VALUES
+    ('real-grid-moscow-demo','Агрегований енергетичний вузол Москви','distribution_region','system-distribution-grid',55.7558,37.6176,25000,'territory-moscow-demo','modelled_demo','planned','src-orb')`,
 ];
 
 async function ensureDatabase() {
@@ -204,7 +275,7 @@ export type WorldSnapshot = Awaited<ReturnType<typeof getWorldSnapshot>>;
 
 export async function getWorldSnapshot() {
   const db = await ensureDatabase();
-  const [entities, relations, facilities, capabilities, dependencies, events, postings, scenarios, runs, sources, externalIdentities, processModels, processFlows, inventoryLots, transportRoutes, circuitRuns, interventions] =
+  const [entities, relations, facilities, capabilities, dependencies, events, postings, scenarios, runs, sources, externalIdentities, processModels, processFlows, inventoryLots, transportRoutes, circuitRuns, interventions, technologies, principleSystems, endProducts, testModels, testModelComponents, territorialUnits, realSystems] =
     await Promise.all([
       all(db, "SELECT * FROM entities ORDER BY level, name"),
       all(db, "SELECT * FROM relations ORDER BY predicate"),
@@ -233,6 +304,13 @@ export async function getWorldSnapshot() {
         JOIN entities d ON d.id = r.destination_entity_id ORDER BY r.duration_hours`),
       all(db, "SELECT * FROM circuit_runs ORDER BY run_at DESC"),
       all(db, "SELECT * FROM interventions ORDER BY id"),
+      all(db, "SELECT * FROM technologies ORDER BY category, name"),
+      all(db, "SELECT * FROM principle_systems ORDER BY system_type, name"),
+      all(db, "SELECT * FROM end_products ORDER BY product_type, name"),
+      all(db, "SELECT * FROM test_models ORDER BY name"),
+      all(db, "SELECT * FROM test_model_components ORDER BY test_model_id, sequence_no"),
+      all(db, "SELECT * FROM territorial_units ORDER BY name"),
+      all(db, "SELECT * FROM real_systems ORDER BY name"),
     ]);
 
   return {
@@ -254,5 +332,12 @@ export async function getWorldSnapshot() {
     transportRoutes,
     circuitRuns,
     interventions,
+    technologies,
+    principleSystems,
+    endProducts,
+    testModels,
+    testModelComponents,
+    territorialUnits,
+    realSystems,
   };
 }

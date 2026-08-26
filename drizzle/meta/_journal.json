@@ -15,6 +15,13 @@
       "when": 1785279147893,
       "tag": "0001_last_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787727600000,
+      "tag": "0002_power_model_registries",
+      "breakpoints": true
     }
   ]
 }
