@@ -43,7 +43,7 @@ Gate повинен перевірити:
 4. повний backend test suite у Python 3.13 контейнері;
 5. повну міграцію чистої PostgreSQL бази до `head`;
 6. застосування міграцій до наявної dev-бази;
-7. health API та frontend;
+7. health API та frontend, відповідь `PONG` від Redis і стан `running` у simulation worker;
 8. контракт workspace v2: типізовані порти, observables, event types і monitor templates;
 9. відсутність whitespace-помилок у Git diff.
 
@@ -57,4 +57,8 @@ Gate повинен перевірити:
 - очікувана поведінка;
 - версія, у якій дефект закрито.
 
-Поточний приклад: спроба з’єднати `emission/co2_mass_flow` з `natural_gas/gas_energy_flow` повинна бути відхилена без зміни графа, після чого модель залишається валідною та доступною для запуску.
+Поточні приклади:
+
+- спроба з’єднати `emission/co2_mass_flow` з `natural_gas/gas_energy_flow` повинна бути відхилена без зміни графа, після чого модель залишається валідною та доступною для запуску;
+- недоступна черга симуляції повинна повертати retryable `503`, зберігати run у стані `queue_waiting` і ніколи не маскуватися як `Internal Server Error`;
+- release gate повинен зупиняти реліз, якщо Redis не відповідає або simulation worker не працює.
