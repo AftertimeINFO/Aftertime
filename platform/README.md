@@ -1,59 +1,71 @@
 # Aftertime Platform
 
-Полноценная локальная продуктовая редакция Aftertime. Запускается в Docker и
-включает:
+## Model Lab
 
-- PostgreSQL — системная модель мира, история наблюдений и результаты расчётов;
-- FastAPI — API, доменные операции и прогнозный движок;
-- Redis — очередь фоновых заданий;
-- worker — синхронизация внешних источников;
-- React/TypeScript — операторский интерфейс;
-- Alembic — контролируемые миграции схемы.
+Локальна робоча Model Lab доступна на `http://localhost:8080` після запуску
+`docker compose up --build -d`. Інтерфейс дозволяє складати граф із компонентів,
+редагувати параметри та Python-контракти, окремо тестувати вузли, публікувати
+незмінні snapshots, керувати модельним часом і вручну або за календарем
+викликати аварійні події. PostgreSQL зберігає моделі, події, checkpoints,
+журнали, ремонтні ресурси та результати запусків.
 
-## Быстрый запуск
+Кваліфікаційний gate перевіряється через `GET /api/v1/lab/qualification` і
+охоплює 15 історично мотивованих системних профілів без координат та реальних
+ідентифікаторів активів.
 
-Требования: Docker Desktop с Docker Compose v2.
+A complete local product edition of Aftertime. It runs with Docker and includes:
+
+- PostgreSQL — system world model, observation history, and calculation results;
+- FastAPI — API, domain operations, and forecasting engine;
+- Redis — background job transport;
+- worker — external source synchronization;
+- React/TypeScript — operator interface;
+- Alembic — controlled schema migrations.
+
+## Quick start
+
+Requirement: Docker Desktop with Docker Compose v2.
 
 ```bash
 cd platform
 docker compose up --build -d
 ```
 
-После запуска:
+After startup:
 
-- интерфейс: http://localhost:8080
+- interface: http://localhost:8080
 - API: http://localhost:8000
 - OpenAPI: http://localhost:8000/docs
-- healthcheck: http://localhost:8000/health
+- health check: http://localhost:8000/health
 
-Проверка состояния:
+Check status:
 
 ```bash
 docker compose ps
 docker compose logs -f api worker frontend
 ```
 
-Остановка:
+Stop:
 
 ```bash
 docker compose down
 ```
 
-Данные PostgreSQL и Redis сохраняются в именованных Docker volumes. Полное
-удаление локальных данных:
+PostgreSQL and Redis data are preserved in named Docker volumes. To remove all
+local data:
 
 ```bash
 docker compose down -v
 ```
 
-## Синхронизация данных
+## Data synchronization
 
-В поставку входят адаптеры:
+Included adapters:
 
-- `chebi` — химические сущности ChEBI 2.0;
-- `worldbank` — показатели World Bank Indicators API.
+- `chebi` — ChEBI 2.0 chemical entities;
+- `worldbank` — World Bank Indicators API.
 
-Запуск синхронизации ChEBI через API:
+Start ChEBI synchronization through the API:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/sync/jobs \
@@ -61,29 +73,29 @@ curl -X POST http://localhost:8000/api/v1/sync/jobs \
   -d '{"source_id":"chebi","parameters":{"external_ids":["16134","18276","17790"]}}'
 ```
 
-Или напрямую внутри контейнера:
+Or run it directly inside the container:
 
 ```bash
 docker compose exec api python -m app.sync_cli --source chebi --external-id 16134
 docker compose exec api python -m app.sync_cli --source worldbank
 ```
 
-Состояние заданий:
+Job status:
 
 ```bash
 curl http://localhost:8000/api/v1/sync/jobs
 ```
 
-## Тесты
+## Tests
 
 ```bash
 docker compose run --rm api python -m pytest
 ```
 
-Проверяются атомарный баланс, распространение отказов и выбор компенсирующих
-действий.
+Tests cover atomic balance, failure propagation, and the selection of
+compensating actions.
 
-## Основные API
+## Main API endpoints
 
 - `GET /api/v1/world/summary`
 - `GET /api/v1/entities`
@@ -92,13 +104,13 @@ docker compose run --rm api python -m pytest
 - `GET /api/v1/sync/jobs`
 - `POST /api/v1/sync/jobs`
 
-## Архитектурные принципы
+## Architecture principles
 
-1. Наблюдаемая реальность отделена от модельных оценок.
-2. Все внешние записи сохраняют источник и доказательство происхождения.
-3. Модель версионируется вместе с результатом расчёта.
-4. Состояние сохраняется в PostgreSQL; frontend не является источником истины.
-5. Синхронизация выполняется worker-процессом и не блокирует API.
-6. Физические проверки выполняются до использования результата в планировании.
+1. Observed reality is separated from model estimates.
+2. Every external record retains its source and provenance evidence.
+3. A model is versioned together with its calculation result.
+4. State is stored in PostgreSQL; the frontend is not a source of truth.
+5. Synchronization runs in a worker process and does not block the API.
+6. Physical checks run before a result is used for planning.
 
-См. [ARCHITECTURE.md](ARCHITECTURE.md).
+See [ARCHITECTURE.md](ARCHITECTURE.md).

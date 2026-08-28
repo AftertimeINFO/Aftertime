@@ -1,4 +1,4 @@
-# Архитектура Aftertime Platform
+# Aftertime Platform architecture
 
 ```text
 Browser
@@ -16,38 +16,37 @@ Nginx + React ─────► FastAPI
                     ChEBI / World Bank / ...
 ```
 
-## Доменные слои
+## Domain layers
 
 ### World model
 
-`entities`, `relations` и `observations` описывают сущности, причинные связи и
-датированные утверждения источников. Атрибуты расширения хранятся в JSONB, а
-основные поля индексируются реляционно.
+`entities`, `relations`, and `observations` describe entities, causal
+relationships, and dated source claims. Extension attributes are stored in
+JSONB, while primary fields are indexed relationally.
 
 ### Process model
 
-`process_models` хранит версионированные технологические спецификации.
-`routes` описывает пространственные ограничения и альтернативные способы
-перемещения.
+`process_models` stores versioned technological specifications. `routes`
+describes spatial constraints and alternative transport methods.
 
 ### Forecasting
 
-`scenarios` хранит предпосылки. Каждый запуск записывается в `simulation_runs`
-вместе с исходным запросом, версией модели, диапазоном неопределённости,
-физической сверкой и объяснением узкого места.
+`scenarios` stores assumptions. Every run is recorded in `simulation_runs`
+together with the input request, model version, uncertainty range, physical
+reconciliation, and bottleneck explanation.
 
 ### Data ingestion
 
-`sources` определяет источник и адаптер. `sync_jobs` является долговечным
-журналом загрузок. Redis используется только как транспорт очереди; состояние
-задания остаётся в PostgreSQL.
+`sources` defines a source and its adapter. `sync_jobs` is the durable ingestion
+ledger. Redis is used only as job transport; the job state remains in
+PostgreSQL.
 
-## Следующее расширение
+## Planned extensions
 
-- бивременность `valid_time` / `recorded_time` для отношений;
-- партионный учёт и журналы событий;
-- PostGIS для инфраструктурных сетей;
-- объектное хранилище сырых снимков источников;
-- планировщик с несколькими целевыми функциями;
-- аутентификация, пространства организаций и ролевая модель;
-- OpenTelemetry, метрики и резервное копирование.
+- bitemporal `valid_time` / `recorded_time` for relationships;
+- lot accounting and event ledgers;
+- PostGIS for infrastructure networks;
+- object storage for immutable raw source snapshots;
+- a planner with multiple objective functions;
+- authentication, organization workspaces, and role-based access control;
+- OpenTelemetry, metrics, and backups.

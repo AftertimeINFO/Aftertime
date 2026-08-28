@@ -5,7 +5,8 @@ mode="${1:-api}"
 
 if [ "$mode" = "api" ]; then
   alembic upgrade head
-  python -m app.seed
+  # Demo data is bootstrap-only. Existing user models are never overwritten on restart.
+  python -m app.seed --if-empty
   exec uvicorn app.main:app --host 0.0.0.0 --port 8000
 fi
 

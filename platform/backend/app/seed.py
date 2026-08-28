@@ -1,30 +1,33 @@
 from datetime import UTC, datetime
 
 from app.db import SessionLocal
-from app.models import Entity, ProcessModel, Relation, Route, Scenario, Source
+from app.models import Entity, LabProject, ProcessModel, Relation, Route, Scenario, Source
+from app.lab_seed import seed_model_lab
 
 ENTITIES = [
-    ("ua", "state", "institutional", "Украина", "UA"),
+    ("ua", "state", "institutional", "Ukraine", "UA"),
     ("operator", "company", "institutional", "Aftertime Nitrogen Operator", None),
-    ("plant", "facility", "object", "Черкасский азотный узел", None),
-    ("line", "production_line", "object", "Линия синтеза аммиака №1", None),
-    ("tank", "storage_asset", "object", "Резервуар аммиака R-01", None),
-    ("railcar", "transport_asset", "object", "Железнодорожная цистерна C-01", None),
-    ("warehouse", "warehouse", "object", "Полтавский региональный склад", None),
-    ("gas", "infrastructure", "object", "Газоснабжение", None),
-    ("grid", "infrastructure", "object", "Энергосистема", None),
-    ("rail", "infrastructure", "object", "Железнодорожная сеть", None),
-    ("workforce", "workforce_pool", "agent", "Производственная смена", None),
-    ("n", "atom", "atomic", "Азот", "N"),
-    ("h", "atom", "atomic", "Водород", "H"),
-    ("n2", "molecule", "molecular", "Молекулярный азот", "N₂"),
-    ("h2", "molecule", "molecular", "Молекулярный водород", "H₂"),
-    ("nh3", "substance", "substance", "Аммиак", "NH₃"),
+    ("plant", "facility", "object", "Cherkasy nitrogen node", None),
+    ("line", "production_line", "object", "Ammonia synthesis line 1", None),
+    ("tank", "storage_asset", "object", "Ammonia tank R-01", None),
+    ("railcar", "transport_asset", "object", "Rail tank car C-01", None),
+    ("warehouse", "warehouse", "object", "Poltava regional warehouse", None),
+    ("gas", "infrastructure", "object", "Gas supply", None),
+    ("grid", "infrastructure", "object", "Power grid", None),
+    ("rail", "infrastructure", "object", "Rail network", None),
+    ("workforce", "workforce_pool", "agent", "Production shift", None),
+    ("n", "atom", "atomic", "Nitrogen", "N"),
+    ("h", "atom", "atomic", "Hydrogen", "H"),
+    ("n2", "molecule", "molecular", "Molecular nitrogen", "N₂"),
+    ("h2", "molecule", "molecular", "Molecular hydrogen", "H₂"),
+    ("nh3", "substance", "substance", "Ammonia", "NH₃"),
 ]
 
 
-def seed() -> None:
+def seed(*, if_empty: bool = False) -> None:
     with SessionLocal() as db:
+        if if_empty and db.get(LabProject, "model-lab-energy"):
+            return
         sources = [
             Source(
                 id="orb",
@@ -95,7 +98,7 @@ def seed() -> None:
         db.merge(
             ProcessModel(
                 id="ammonia-circuit",
-                name="Одна тонна аммиака",
+                name="One tonne of ammonia",
                 version="ammonia-circuit-v0.3",
                 owner_entity_id="line",
                 duration_hours=18,
@@ -140,19 +143,19 @@ def seed() -> None:
         scenarios = [
             (
                 "base",
-                "Базовый",
+                "Baseline",
                 0.55,
                 {"gas": 0.74, "grid": 0.88, "logistics": 0.67, "workforce": 0.91},
             ),
             (
                 "resilient",
-                "Устойчивый",
+                "Resilient",
                 0.25,
                 {"gas": 0.92, "grid": 0.94, "logistics": 0.88, "workforce": 0.95},
             ),
             (
                 "stress",
-                "Логистический стресс",
+                "Logistics stress",
                 0.20,
                 {"gas": 0.48, "grid": 0.79, "logistics": 0.42, "workforce": 0.86},
             ),
@@ -162,14 +165,17 @@ def seed() -> None:
                 Scenario(
                     id=scenario_id,
                     name=name,
-                    description=f"Пилотный сценарий: {name.lower()}",
+                    description=f"Pilot scenario: {name.lower()}",
                     probability=probability,
                     assumptions=assumptions,
                     model_version="ammonia-circuit-v0.3",
                 )
             )
         db.commit()
+        seed_model_lab(db)
 
 
 if __name__ == "__main__":
-    seed()
+    import sys
+
+    seed(if_empty="--if-empty" in sys.argv)

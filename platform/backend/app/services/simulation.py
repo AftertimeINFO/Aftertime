@@ -43,17 +43,17 @@ def simulate_ammonia(request: AmmoniaSimulationRequest) -> dict:
     balance_error = fabs(nitrogen - nitrogen_out) + fabs(hydrogen - hydrogen_out)
 
     actions = {
-        "gas": ("Подключить резерв газа", "Подача сырья и энергии до 92%", 8.0, 0.92),
-        "grid": ("Включить резервное питание", "Электроснабжение до 95%", 2.0, 0.95),
+        "gas": ("Enable backup gas supply", "Feedstock and energy supply restored to 92%", 8.0, 0.92),
+        "grid": ("Enable backup power", "Power availability restored to 95%", 2.0, 0.95),
         "logistics": (
-            "Перенаправить через автомобильный терминал",
-            "Доступность доставки до 86%",
+            "Reroute through the road terminal",
+            "Delivery availability restored to 86%",
             12.0,
             0.86,
         ),
         "workforce": (
-            "Вызвать резервную квалифицированную смену",
-            "Кадровая доступность до 96%",
+            "Call in the qualified reserve shift",
+            "Workforce availability restored to 96%",
             6.0,
             0.96,
         ),

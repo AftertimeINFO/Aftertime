@@ -12,12 +12,12 @@ def test_atomic_balance_closes() -> None:
 def test_gas_failure_propagates_to_recommendation() -> None:
     result = simulate_ammonia(AmmoniaSimulationRequest(gas_availability=0.35, persist=False))
     assert result["bottleneck"] == "gas"
-    assert "резерв газа" in result["recommendation"]["action"].lower()
+    assert "backup gas" in result["recommendation"]["action"].lower()
     assert result["recommendation"]["recovered_kg"] > 0
 
 
 def test_logistics_failure_produces_rerouting_plan() -> None:
     result = simulate_ammonia(AmmoniaSimulationRequest(logistics_availability=0.42, persist=False))
     assert result["bottleneck"] == "logistics"
-    assert "автомобильный терминал" in result["recommendation"]["action"].lower()
+    assert "road terminal" in result["recommendation"]["action"].lower()
     assert result["expected_hours"] > 40

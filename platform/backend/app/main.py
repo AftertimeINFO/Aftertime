@@ -3,12 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.routes import router
+from app.api.model_lab import router as model_lab_router
 from app.config import settings
 from app.db import engine
 
 app = FastAPI(
     title="Aftertime Platform API",
-    version="0.1.0",
+    version="0.4.0-rc.1",
     description="Physical world model, simulation and planning API",
 )
 app.add_middleware(
@@ -19,6 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(model_lab_router)
 
 
 @app.get("/health")

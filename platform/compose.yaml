@@ -64,6 +64,11 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SYNC_POLL_SECONDS: ${SYNC_POLL_SECONDS:-5}
     command: ["/app/docker-entrypoint.sh", "worker"]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=256m
     depends_on:
       api:
         condition: service_healthy
