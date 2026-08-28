@@ -16,7 +16,10 @@ import {
 import "@xyflow/react/dist/style.css";
 import { api, type PortContract, type Row, type Workspace } from "./api";
 import {
+  diagnosticSeriesDash,
+  diagnosticSeriesStats,
   diagnosticSeriesValue,
+  formatDiagnosticValue,
   preferredDiagnosticPoint,
   resolveSeriesNodeId,
 } from "./chartNavigation";
@@ -1588,8 +1591,14 @@ function DiagnosticCharts({ w, nodes, samples, timeline, selectedNodeId, focusNo
           const nodeId = resolveSeriesNodeId(nodes, series);
           const node = nodes.find((item: Row) => item.id === nodeId);
           const spec = metricSpec(series);
+          const stats = diagnosticSeriesStats(visible, nodes, series);
+          const unit = spec?.unit ? ` ${spec.unit}` : "";
           return <span className="series-chip" key={`${series.address || series.point_component_type}-${series.metric_key || series.metric}-${index}`} style={{ "--series": series.color } as any}>
-            <button onClick={() => nodeId && focusNode(nodeId)} title="Показати елемент на схемі"><i />{node?.name || series.target_key || series.point_component_type} · {spec?.label || series.metric_key || series.metric}</button>
+            <button className="series-summary" onClick={() => nodeId && focusNode(nodeId)} title="Показати елемент на схемі">
+              <span><i />{node?.name || series.target_key || series.point_component_type} · {spec?.label || series.metric_key || series.metric}</span>
+              <strong>{stats ? `${formatDiagnosticValue(stats.latest)}${unit}` : "немає даних"}</strong>
+              {stats && <small>min {formatDiagnosticValue(stats.min)} · max {formatDiagnosticValue(stats.max)}{unit} · {stats.count} вим.</small>}
+            </button>
             <button className="remove-series" aria-label="Прибрати ряд" title="Прибрати ряд" onClick={() => updateCurrent({ ...current, series: current.series.filter((_: Row, i: number) => i !== index) })}>×</button>
           </span>;
         })}
@@ -1602,7 +1611,7 @@ function DiagnosticCharts({ w, nodes, samples, timeline, selectedNodeId, focusNo
             const value = valueAt(sample, series), width = Math.max(2, 760 / Math.max(visible.length, 1) / Math.max(current.series.length, 1));
             if (!Number.isFinite(value)) return null;
             return <rect key={`${seriesIndex}-${index}`} x={x(sample) - width / 2 + seriesIndex * 2} y={y(value, series)} width={width} height={Math.max(1, 186 - y(value, series))} fill={series.color} opacity=".42"><title>{clock(sample.model_time)} · {value} {metricSpec(series)?.unit}</title></rect>;
-          }) : <path key={seriesIndex} d={linePath(series)} fill="none" stroke={series.color} strokeWidth="3" strokeLinejoin="round"><title>{metricSpec(series)?.label}</title></path>)}
+          }) : <path key={seriesIndex} d={linePath(series)} fill="none" stroke={series.color} strokeWidth="3" strokeDasharray={diagnosticSeriesDash(seriesIndex)} strokeLinecap="round" strokeLinejoin="round"><title>{metricSpec(series)?.label}</title></path>)}
           <text x="48" y="210">{clock(visible[0]?.model_time)}</text><text x="872" y="210" textAnchor="end">{clock(visible.at(-1)?.model_time)}</text>
         </svg>}
       </div>

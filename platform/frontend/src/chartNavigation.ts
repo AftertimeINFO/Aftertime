@@ -23,6 +23,47 @@ export function diagnosticSeriesValue(
 }
 
 
+export type DiagnosticSeriesStats = {
+  latest: number;
+  min: number;
+  max: number;
+  count: number;
+};
+
+
+export function diagnosticSeriesStats(
+  samples: Row[],
+  nodes: Row[],
+  series: Row,
+): DiagnosticSeriesStats | null {
+  const values = samples
+    .map((sample) => diagnosticSeriesValue(sample, nodes, series))
+    .filter(Number.isFinite);
+  if (!values.length) return null;
+  return {
+    latest: values.at(-1) as number,
+    min: Math.min(...values),
+    max: Math.max(...values),
+    count: values.length,
+  };
+}
+
+
+export function formatDiagnosticValue(value: number): string {
+  return new Intl.NumberFormat("uk-UA", {
+    maximumFractionDigits: Math.abs(value) < 10 ? 3 : 2,
+  }).format(value);
+}
+
+
+const SERIES_DASH_PATTERNS = ["", "10 5", "3 4", "14 4 3 4", "2 3 8 3"];
+
+
+export function diagnosticSeriesDash(index: number): string {
+  return SERIES_DASH_PATTERNS[index % SERIES_DASH_PATTERNS.length];
+}
+
+
 export function preferredDiagnosticPoint(
   nodes: Row[],
   catalog: Row[],

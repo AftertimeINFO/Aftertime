@@ -57,6 +57,7 @@ def normalized_ports(component: LabComponentType, overrides: dict | None = None)
             "domain": _legacy_domain(component, raw),
             "role": raw.get("role", "flow"),
             "quantity": raw.get("quantity") or raw.get("variable") or "flow",
+            "variable": raw.get("variable"),
             "unit": raw.get("unit", ""),
             "required": bool(raw.get("required", False)),
             "multiple": bool(raw.get("multiple", False)),
@@ -137,7 +138,8 @@ def observable_catalog(
         if not component:
             continue
         keys: dict[str, tuple[str, str, str, str]] = {"online": common["online"]}
-        for port in normalized_ports(component, node.port_overrides):
+        ports = normalized_ports(component, node.port_overrides)
+        for port in ports:
             if port["domain"] == "electric.ac":
                 keys.update({key: common[key] for key in ("voltage_pu", "frequency_hz")})
                 if port["direction"] in {"output", "bidirectional"}:
@@ -155,7 +157,12 @@ def observable_catalog(
         output_key = str(node.parameters.get("output_key") or "")
         if output_key:
             spec = metric_map.get(output_key)
-            keys[output_key] = (spec.name if spec else output_key, spec.unit if spec else "", f"outputs.{output_key}", "number")
+            source_port = next((port for port in ports if port.get("variable") == output_key), None)
+            keys[output_key] = (
+                spec.name if spec else source_port.get("name", output_key) if source_port else output_key,
+                spec.unit if spec else source_port.get("unit", "") if source_port else "",
+                f"outputs.{output_key}", "number",
+            )
         if node.parameters.get("mode") in {"load", "refrigerator", "led"}:
             keys["demand_mw"] = ("Навантаження", "MW", "metrics.node_metrics.{node_id}.demand_mw", "number")
         for metric_key, (name, unit, path, value_type) in keys.items():

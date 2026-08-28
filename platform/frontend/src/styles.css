@@ -732,6 +732,28 @@ pre {
   border: 0;
   font-size: 7px;
 }
+.series-legend .series-chip .series-summary {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 1px 8px;
+  text-align: left;
+}
+.series-summary > span {
+  grid-column: 1;
+}
+.series-summary strong {
+  grid-column: 2;
+  grid-row: 1;
+  color: #f3fff9;
+  font-size: 8px;
+  white-space: nowrap;
+}
+.series-summary small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 6px;
+  white-space: nowrap;
+}
 .series-legend .series-chip button:first-child:hover {
   color: var(--signal);
 }

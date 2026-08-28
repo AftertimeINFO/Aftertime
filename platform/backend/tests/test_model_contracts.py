@@ -87,6 +87,20 @@ def test_observables_are_derived_from_selected_graph_element():
     assert all(item["target_id"] == plant.id for item in catalog)
 
 
+def test_output_observable_inherits_its_port_unit_without_manual_metric_definition():
+    """Regression: generated output series was shown as a unitless number."""
+    stock_type = component("gas-stock", "resource", "gas_energy_mw")
+    stock = node("n-stock", "gas-stock", "stock-1")
+    stock.parameters = {"output_key": "gas_energy_mw"}
+
+    observable = next(
+        item for item in observable_catalog([stock], {"gas-stock": stock_type}, [], [])
+        if item["metric_key"] == "gas_energy_mw"
+    )
+
+    assert observable["unit"] == "MW"
+
+
 def test_canvas_coordinates_do_not_change_execution_order():
     source = node("source", "source", "a-source", x=900)
     target = node("target", "target", "z-target", x=0)

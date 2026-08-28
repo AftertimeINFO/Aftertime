@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  diagnosticSeriesDash,
+  diagnosticSeriesStats,
   diagnosticSeriesValue,
+  formatDiagnosticValue,
   preferredDiagnosticPoint,
   resolveSeriesNodeId,
 } from "./chartNavigation";
@@ -43,5 +46,31 @@ describe("chart-to-graph navigation", () => {
         metric_key: "gas_energy_mw",
       }),
     ).toBeNaN();
+  });
+
+  it("shows numeric summary instead of a name-only chart legend", () => {
+    const samples = [
+      { metrics: { node_metrics: { plant: { gas_energy_mw: 500 } } } },
+      { metrics: { node_metrics: { plant: { gas_energy_mw: 475 } } } },
+    ];
+    const series = { target_id: "plant", metric_key: "gas_energy_mw" };
+
+    expect(diagnosticSeriesStats(samples, nodes, series)).toEqual({
+      latest: 475,
+      min: 475,
+      max: 500,
+      count: 2,
+    });
+    expect(diagnosticSeriesStats([], nodes, series)).toBeNull();
+    expect(formatDiagnosticValue(475.125)).toMatch(/^475(?:[,.])13$/);
+  });
+
+  it("keeps three overlapping line series visually distinguishable", () => {
+    const patterns = [0, 1, 2].map(diagnosticSeriesDash);
+
+    expect(new Set(patterns).size).toBe(3);
+    expect(patterns[0]).toBe("");
+    expect(patterns[1]).not.toBe("");
+    expect(patterns[2]).not.toBe("");
   });
 });
