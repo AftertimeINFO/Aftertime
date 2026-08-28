@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { api, type PortContract, type Row, type Workspace } from "./api";
 import { preferredDiagnosticPoint, resolveSeriesNodeId } from "./chartNavigation";
+import { DEFAULT_SCENARIO_ID, shouldAutoStartDefaultScenario } from "./startup";
 
 const palette: Record<string, string> = {
   resource: "#64d8cb",
@@ -92,11 +93,12 @@ export default function App() {
     [run, setRun] = useState<Row | null>(null),
     [test, setTest] = useState<Row | null>(null),
     [validation, setValidation] = useState<Row | null>(null),
-    [scenario, setScenario] = useState("baseline"),
+    [scenario, setScenario] = useState(DEFAULT_SCENARIO_ID),
     [timeline, setTimeline] = useState<Row | null>(null),
     [flow, setFlow] = useState<ReactFlowInstance<Node, Edge> | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]),
     [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const autoStartRequested = useRef(false);
   const modelNodes = useCallback(
     (rows: Row[], components: Row[]) =>
       rows.map((n) => {
@@ -365,6 +367,19 @@ export default function App() {
       setBusy(false);
     }
   };
+  useEffect(() => {
+    const selectedScenario = w?.scenarios.find((item) => item.id === scenario);
+    if (!shouldAutoStartDefaultScenario({
+      scenarioId: scenario,
+      scenarioModelVersionId: selectedScenario?.model_version_id,
+      loadedModelVersionId: viewVersion?.id,
+      timelineReady: Boolean(timeline),
+      runExists: Boolean(run),
+      alreadyRequested: autoStartRequested.current,
+    })) return;
+    autoStartRequested.current = true;
+    void runModel();
+  }, [scenario, timeline, viewVersion?.id, w, run]);
   const focusGraphNode = useCallback((nodeId: string) => {
     if (!graphRows.some((node) => node.id === nodeId)) return;
     setMode("model");
