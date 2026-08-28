@@ -9,7 +9,7 @@ from app.db import engine
 
 app = FastAPI(
     title="Aftertime Platform API",
-    version="0.4.0-rc.2",
+    version="0.4.0-rc.3",
     description="Physical world model, simulation and planning API",
 )
 app.add_middleware(

@@ -11,6 +11,18 @@ export function resolveSeriesNodeId(nodes: Row[], series: Row): string | undefin
 }
 
 
+export function diagnosticSeriesValue(
+  sample: Row,
+  nodes: Row[],
+  series: Row,
+): number {
+  const nodeId = resolveSeriesNodeId(nodes, series);
+  const metricKey = series.metric_key || series.metric;
+  const value = sample.metrics?.node_metrics?.[nodeId || ""]?.[metricKey];
+  return value === undefined || value === null ? Number.NaN : Number(value);
+}
+
+
 export function preferredDiagnosticPoint(
   nodes: Row[],
   catalog: Row[],

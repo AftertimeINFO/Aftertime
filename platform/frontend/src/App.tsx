@@ -15,7 +15,11 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api, type PortContract, type Row, type Workspace } from "./api";
-import { preferredDiagnosticPoint, resolveSeriesNodeId } from "./chartNavigation";
+import {
+  diagnosticSeriesValue,
+  preferredDiagnosticPoint,
+  resolveSeriesNodeId,
+} from "./chartNavigation";
 import { DEFAULT_SCENARIO_ID, shouldAutoStartDefaultScenario } from "./startup";
 
 const palette: Record<string, string> = {
@@ -1499,11 +1503,8 @@ function DiagnosticCharts({ w, nodes, samples, timeline, selectedNodeId, focusNo
       const legacy = w.metrics.find((item: Row) => item.id === (series.metric_key || series.metric));
       return observable ? { id: observable.metric_key, label: observable.name, unit: observable.unit } : legacy ? { id: legacy.id, label: legacy.name, unit: legacy.unit } : undefined;
     },
-    valueAt = (sample: Row, series: Row) => {
-      const node = nodes.find((item: Row) => item.id === series.target_id || item.instance_key === series.target_key || item.component_type_id === series.point_component_type);
-      const value = sample.metrics?.node_metrics?.[node?.id]?.[series.metric_key || series.metric];
-      return value === undefined || value === null ? Number.NaN : Number(value);
-    },
+    valueAt = (sample: Row, series: Row) =>
+      diagnosticSeriesValue(sample, nodes, series),
     domain = (series: Row) => {
       const values = visible.map((sample: Row) => valueAt(sample, series)).filter(Number.isFinite);
       if ((series.metric_key || series.metric) === "voltage_pu") return [0, 1.1];

@@ -14,7 +14,7 @@ from app.services.model_contracts import (
     normalized_ports,
     observable_catalog,
 )
-from app.services.model_lab import _ordered_nodes, validate_graph
+from app.services.model_lab import _network_metrics, _ordered_nodes, validate_graph
 from app.services.cep import evaluate_rules
 from app.services.run_queue import SimulationQueueUnavailable
 
@@ -175,3 +175,32 @@ def test_unavailable_simulation_queue_returns_retryable_503(monkeypatch):
         assert "resume" in run.error
         db.delete(run)
         db.commit()
+
+
+def test_component_outputs_are_recorded_for_diagnostic_charts():
+    """Regression: added gas_energy_mw series had no historical values to draw."""
+    stock = node("gas-stock", "gas-stock-type", "gas-stock")
+    state = {
+        "nodes": {
+            stock.id: {
+                "state": {"online": True, "resource_mwh": 1000},
+                "outputs": {
+                    "gas_energy_mw": 500,
+                    "gas_flow_mw": 423.55,
+                    "alarm": False,
+                    "label": "stock",
+                },
+            }
+        }
+    }
+    metrics = _network_metrics(
+        [stock],
+        [],
+        state,
+        {"gas-stock-type": SimpleNamespace(category="resource")},
+    )
+
+    recorded = metrics["node_metrics"][stock.id]
+    assert recorded["gas_energy_mw"] == 500
+    assert recorded["gas_flow_mw"] == 423.55
+    assert "alarm" not in recorded and "label" not in recorded

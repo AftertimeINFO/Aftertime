@@ -255,6 +255,11 @@ def _network_metrics(nodes: list[LabNode], edges: list[LabEdge], state: dict, ty
     node_metrics = {}
     for node in nodes:
         node_state = state["nodes"].get(node.id, {})
+        recorded_outputs = {
+            key: round(float(value), 6)
+            for key, value in node_state.get("outputs", {}).items()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        }
         node_online = node.id in online
         island = next((item for item in island_stats if node.id in item["nodes"]), None)
         energized = bool(node_online and island and island["energized"])
@@ -267,6 +272,7 @@ def _network_metrics(nodes: list[LabNode], edges: list[LabEdge], state: dict, ty
                 1 - voltage_drop - 0.06 * island["deficit_mw"] / max(island["demand_mw"], 1),
             )
         node_metrics[node.id] = {
+            **recorded_outputs,
             "online": node_online,
             "energized": energized,
             "voltage_pu": round(node_voltage, 4),

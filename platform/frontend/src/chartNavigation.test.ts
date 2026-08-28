@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { preferredDiagnosticPoint, resolveSeriesNodeId } from "./chartNavigation";
+import {
+  diagnosticSeriesValue,
+  preferredDiagnosticPoint,
+  resolveSeriesNodeId,
+} from "./chartNavigation";
 
 const nodes = [
   { id: "plant", instance_key: "steam-plant", component_type_id: "tpp" },
@@ -21,5 +25,23 @@ describe("chart-to-graph navigation", () => {
   it("uses a selected graph node only when it has numeric observables", () => {
     expect(preferredDiagnosticPoint(nodes, catalog, "plant", "")).toBe("plant");
     expect(preferredDiagnosticPoint(nodes, catalog, "lamp", "plant")).toBe("plant");
+  });
+
+  it("reads newly recorded component outputs for an added chart series", () => {
+    const sample = {
+      metrics: { node_metrics: { plant: { gas_energy_mw: 500 } } },
+    };
+    expect(
+      diagnosticSeriesValue(sample, nodes, {
+        target_id: "plant",
+        metric_key: "gas_energy_mw",
+      }),
+    ).toBe(500);
+    expect(
+      diagnosticSeriesValue(sample, nodes, {
+        target_id: "lamp",
+        metric_key: "gas_energy_mw",
+      }),
+    ).toBeNaN();
   });
 });
