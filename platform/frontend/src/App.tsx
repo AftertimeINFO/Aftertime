@@ -11,9 +11,11 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api, type PortContract, type Row, type Workspace } from "./api";
+import { preferredDiagnosticPoint, resolveSeriesNodeId } from "./chartNavigation";
 
 const palette: Record<string, string> = {
   resource: "#64d8cb",
@@ -91,7 +93,8 @@ export default function App() {
     [test, setTest] = useState<Row | null>(null),
     [validation, setValidation] = useState<Row | null>(null),
     [scenario, setScenario] = useState("baseline"),
-    [timeline, setTimeline] = useState<Row | null>(null);
+    [timeline, setTimeline] = useState<Row | null>(null),
+    [flow, setFlow] = useState<ReactFlowInstance<Node, Edge> | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]),
     [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const modelNodes = useCallback(
@@ -362,6 +365,18 @@ export default function App() {
       setBusy(false);
     }
   };
+  const focusGraphNode = useCallback((nodeId: string) => {
+    if (!graphRows.some((node) => node.id === nodeId)) return;
+    setMode("model");
+    setSelectedId(nodeId);
+    setSelectedEdgeId(null);
+    setSideTab("element");
+    setDetailTab("monitoring");
+    window.setTimeout(() => {
+      flow?.fitView({ nodes: [{ id: nodeId }], padding: 1.5, duration: 550 });
+      document.querySelector(".canvas")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }, [flow, graphRows]);
   if (!w)
     return <div className="loading">MODEL LAB · завантаження… {error}</div>;
   return (
@@ -511,6 +526,7 @@ export default function App() {
             </span>
           </div>
           <ReactFlow
+            onInit={setFlow}
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
@@ -581,6 +597,8 @@ export default function App() {
         setScenario={setScenario}
         start={runModel}
         setRun={setRun}
+        selectedNodeId={selectedId}
+        focusNode={focusGraphNode}
       />
       {busy && <div className="busy">ОБРОБКА…</div>}
     </main>
@@ -1159,6 +1177,8 @@ function Monitor({
   setScenario,
   start,
   setRun,
+  selectedNodeId,
+  focusNode,
 }: any) {
   const [idleSpeed, setIdleSpeed] = useState(3600),
     [eventSpeed, setEventSpeed] = useState(60),
@@ -1417,6 +1437,8 @@ function Monitor({
         nodes={graphRows}
         samples={(run?.samples || []).slice().reverse()}
         timeline={timeline}
+        selectedNodeId={selectedNodeId}
+        focusNode={focusNode}
       />
     </section>
   );
@@ -1424,7 +1446,7 @@ function Monitor({
 
 const seriesColors = ["#f0bd63", "#b7f34a", "#64d8cb", "#d899ff", "#ff8f72"];
 
-function DiagnosticCharts({ w, nodes, samples, timeline }: any) {
+function DiagnosticCharts({ w, nodes, samples, timeline, selectedNodeId, focusNode }: any) {
   const dashboard = w.dashboards.find((item: Row) => item.id === "energy-system-monitor"),
     configured = dashboard?.panels?.find((panel: Row) => panel.type === "diagnostic_charts")?.sets || [],
     [sets, setSets] = useState<Row[]>(configured),
@@ -1497,9 +1519,10 @@ function DiagnosticCharts({ w, nodes, samples, timeline }: any) {
       );
     };
   useEffect(() => {
-    if (!controlPoints.some((item: Row) => item.type === point)) setPoint(controlPoints[0]?.type || "");
+    const nextPoint = preferredDiagnosticPoint(nodes, catalog, selectedNodeId, point);
+    if (nextPoint !== point) setPoint(nextPoint);
     if (!pointMetrics.some((item: Row) => item.address === metric)) setMetric(pointMetrics[0]?.address || "");
-  }, [catalog.length, point, metric, nodes.length]);
+  }, [catalog.length, point, metric, nodes.length, selectedNodeId]);
   const updateCurrent = (next: Row) => setSets((old) => old.map((item, index) => index === active ? next : item));
   const addSeries = () => {
     if (!current) return;
@@ -1535,7 +1558,7 @@ function DiagnosticCharts({ w, nodes, samples, timeline }: any) {
         <button onClick={addSet} title="Новий комплект графіків">＋</button>
       </div>
       <div className="chart-config">
-        <select aria-label="Точка діагностики" value={point} onChange={(e) => { const id = e.target.value; setPoint(id); setMetric(catalog.find((item: Row) => item.target_id === id && item.value_type === "number")?.address || ""); }}>
+        <select aria-label="Точка діагностики" value={point} onChange={(e) => { const id = e.target.value; setPoint(id); setMetric(catalog.find((item: Row) => item.target_id === id && item.value_type === "number")?.address || ""); focusNode(id); }}>
           {controlPoints.map(({ type, node }: any) => <option value={type} key={type}>{node.name}</option>)}
         </select>
         <select aria-label="Параметр діагностики" value={metric} onChange={(e) => setMetric(e.target.value)}>
@@ -1546,9 +1569,13 @@ function DiagnosticCharts({ w, nodes, samples, timeline }: any) {
       </div>
       <div className="series-legend">
         {current.series.map((series: Row, index: number) => {
-          const node = nodes.find((item: Row) => item.id === series.target_id || item.instance_key === series.target_key || item.component_type_id === series.point_component_type);
+          const nodeId = resolveSeriesNodeId(nodes, series);
+          const node = nodes.find((item: Row) => item.id === nodeId);
           const spec = metricSpec(series);
-          return <button key={`${series.address || series.point_component_type}-${series.metric_key || series.metric}-${index}`} style={{ "--series": series.color } as any} onClick={() => updateCurrent({ ...current, series: current.series.filter((_: Row, i: number) => i !== index) })} title="Прибрати ряд"><i />{node?.name || series.target_key || series.point_component_type} · {spec?.label || series.metric_key || series.metric} ×</button>;
+          return <span className="series-chip" key={`${series.address || series.point_component_type}-${series.metric_key || series.metric}-${index}`} style={{ "--series": series.color } as any}>
+            <button onClick={() => nodeId && focusNode(nodeId)} title="Показати елемент на схемі"><i />{node?.name || series.target_key || series.point_component_type} · {spec?.label || series.metric_key || series.metric}</button>
+            <button className="remove-series" aria-label="Прибрати ряд" title="Прибрати ряд" onClick={() => updateCurrent({ ...current, series: current.series.filter((_: Row, i: number) => i !== index) })}>×</button>
+          </span>;
         })}
       </div>
       <div className="chart-canvas">

@@ -718,13 +718,26 @@ pre {
   font-size: 7px;
   font-style: normal;
 }
-.series-legend button {
+.series-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: #07110e;
+}
+.series-legend .series-chip button {
   flex: 0 0 auto;
   padding: 3px 5px;
   color: #b9cbc4;
   background: #07110e;
-  border: 1px solid var(--line);
+  border: 0;
   font-size: 7px;
+}
+.series-legend .series-chip button:first-child:hover {
+  color: var(--signal);
+}
+.series-legend .series-chip .remove-series {
+  border-left: 1px solid var(--line);
+  color: #ff8f72;
 }
 .series-legend i {
   display: inline-block;
