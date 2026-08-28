@@ -64,6 +64,24 @@ export function diagnosticSeriesDash(index: number): string {
 }
 
 
+export function diagnosticSeriesLaneY(
+  value: number,
+  domain: [number, number],
+  index: number,
+  seriesCount: number,
+): number {
+  const top = 24;
+  const bottom = 186;
+  const count = Math.max(1, seriesCount);
+  const laneHeight = (bottom - top) / count;
+  const laneTop = top + laneHeight * index + 5;
+  const laneBottom = top + laneHeight * (index + 1) - 5;
+  const [min, max] = domain;
+  const normalized = (value - min) / Math.max(0.0001, max - min);
+  return laneBottom - normalized * Math.max(1, laneBottom - laneTop);
+}
+
+
 export function preferredDiagnosticPoint(
   nodes: Row[],
   catalog: Row[],

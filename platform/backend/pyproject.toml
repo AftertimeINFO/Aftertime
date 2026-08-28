@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aftertime-platform"
-version = "0.4.0rc4"
+version = "0.4.0rc5"
 description = "Physical world model, simulation and planning API"
 requires-python = ">=3.13"
 dependencies = [

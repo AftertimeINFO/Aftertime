@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   diagnosticSeriesDash,
+  diagnosticSeriesLaneY,
   diagnosticSeriesStats,
   diagnosticSeriesValue,
   formatDiagnosticValue,
@@ -72,5 +73,15 @@ describe("chart-to-graph navigation", () => {
     expect(patterns[0]).toBe("");
     expect(patterns[1]).not.toBe("");
     expect(patterns[2]).not.toBe("");
+  });
+
+  it("places equally normalized series in separate vertical lanes", () => {
+    const y = [0, 1, 2].map((index) =>
+      diagnosticSeriesLaneY(1, [0, 1], index, 3),
+    );
+
+    expect(new Set(y).size).toBe(3);
+    expect(y[0]).toBeLessThan(y[1]);
+    expect(y[1]).toBeLessThan(y[2]);
   });
 });

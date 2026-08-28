@@ -17,6 +17,7 @@ import "@xyflow/react/dist/style.css";
 import { api, type PortContract, type Row, type Workspace } from "./api";
 import {
   diagnosticSeriesDash,
+  diagnosticSeriesLaneY,
   diagnosticSeriesStats,
   diagnosticSeriesValue,
   formatDiagnosticValue,
@@ -1515,14 +1516,12 @@ function DiagnosticCharts({ w, nodes, samples, timeline, selectedNodeId, focusNo
       return [Math.min(0, ...values), Math.max(1, ...values) * 1.08];
     },
     x = (sample: Row) => 48 + ((new Date(sample.model_time).getTime() - timeMin) / Math.max(1, timeMax - timeMin)) * 824,
-    y = (value: number, series: Row) => {
-      const [min, max] = domain(series);
-      return 186 - ((value - min) / Math.max(.0001, max - min)) * 150;
-    },
-    linePath = (series: Row) => {
+    y = (value: number, series: Row, seriesIndex: number) =>
+      diagnosticSeriesLaneY(value, domain(series) as [number, number], seriesIndex, current?.series?.length || 1),
+    linePath = (series: Row, seriesIndex: number) => {
       const points = visible.map((sample: Row) => ({
         x: x(sample),
-        y: y(valueAt(sample, series), series),
+        y: y(valueAt(sample, series), series, seriesIndex),
       })).filter((point: Row) => Number.isFinite(point.y));
       if (!points.length) return "";
       const first = `M${points[0].x},${points[0].y}`;
@@ -1605,13 +1604,18 @@ function DiagnosticCharts({ w, nodes, samples, timeline, selectedNodeId, focusNo
       </div>
       <div className="chart-canvas">
         {!visible.length ? <p>Запустіть модель, щоб накопичити історичні вимірювання.</p> : <svg viewBox="0 0 900 220" role="img" aria-label={`Діагностичний графік ${current.name}`}>
-          {[36, 86, 136, 186].map((top) => <line key={top} x1="48" x2="872" y1={top} y2={top} className="grid-line" />)}
+          {current.series.map((_: Row, index: number) => {
+            const laneBottom = 24 + (162 / Math.max(1, current.series.length)) * (index + 1);
+            return <line key={`lane-${index}`} x1="48" x2="872" y1={laneBottom} y2={laneBottom} className="grid-line" />;
+          })}
           {incidentAt && new Date(incidentAt).getTime() >= timeMin && new Date(incidentAt).getTime() <= timeMax && <><line x1={x({model_time:incidentAt})} x2={x({model_time:incidentAt})} y1="24" y2="190" className="incident-line"/><text x={x({model_time:incidentAt}) + 5} y="30">АВАРІЯ</text></>}
           {current.series.map((series: Row, seriesIndex: number) => series.style === "bar" ? visible.map((sample: Row, index: number) => {
             const value = valueAt(sample, series), width = Math.max(2, 760 / Math.max(visible.length, 1) / Math.max(current.series.length, 1));
             if (!Number.isFinite(value)) return null;
-            return <rect key={`${seriesIndex}-${index}`} x={x(sample) - width / 2 + seriesIndex * 2} y={y(value, series)} width={width} height={Math.max(1, 186 - y(value, series))} fill={series.color} opacity=".42"><title>{clock(sample.model_time)} · {value} {metricSpec(series)?.unit}</title></rect>;
-          }) : <path key={seriesIndex} d={linePath(series)} fill="none" stroke={series.color} strokeWidth="3" strokeDasharray={diagnosticSeriesDash(seriesIndex)} strokeLinecap="round" strokeLinejoin="round"><title>{metricSpec(series)?.label}</title></path>)}
+            const valueY = y(value, series, seriesIndex);
+            const laneBottom = 24 + (162 / Math.max(1, current.series.length)) * (seriesIndex + 1) - 5;
+            return <rect key={`${seriesIndex}-${index}`} x={x(sample) - width / 2 + seriesIndex * 2} y={valueY} width={width} height={Math.max(1, laneBottom - valueY)} fill={series.color} opacity=".42"><title>{clock(sample.model_time)} · {value} {metricSpec(series)?.unit}</title></rect>;
+          }) : <path key={seriesIndex} d={linePath(series, seriesIndex)} fill="none" stroke={series.color} strokeWidth="3" strokeDasharray={diagnosticSeriesDash(seriesIndex)} strokeLinecap="round" strokeLinejoin="round"><title>{metricSpec(series)?.label}</title></path>)}
           <text x="48" y="210">{clock(visible[0]?.model_time)}</text><text x="872" y="210" textAnchor="end">{clock(visible.at(-1)?.model_time)}</text>
         </svg>}
       </div>
