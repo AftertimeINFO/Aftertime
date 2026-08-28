@@ -2,11 +2,13 @@ import logging
 import time
 from datetime import UTC, datetime, timedelta
 from redis import Redis
+from redis.exceptions import RedisError
 
 from app.config import settings
 from app.db import SessionLocal
 from app.models import LabRun, SyncJob
 from app.services.model_lab import prepare_run, process_next
+from app.services.run_queue import SimulationQueueUnavailable, enqueue_simulation
 from app.sync.runner import run_sync_job
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -17,7 +19,12 @@ def main() -> None:
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     logger.info("sync and Model Lab worker ready")
     while True:
-        item = redis.blpop(["aftertime:simulation", "aftertime:sync"], timeout=settings.sync_poll_seconds)
+        try:
+            item = redis.blpop(["aftertime:simulation", "aftertime:sync"], timeout=settings.sync_poll_seconds)
+        except RedisError:
+            logger.warning("queue unavailable; worker will retry", exc_info=True)
+            time.sleep(min(max(settings.sync_poll_seconds, 1), 10))
+            continue
         if not item:
             continue
         queue, job_id = item
@@ -54,7 +61,10 @@ def main() -> None:
                         if model_seconds:
                             desired_wall_seconds = model_seconds / max(step_speed, .001)
                             time.sleep(max(0, desired_wall_seconds - (time.perf_counter() - iteration_started)))
-                        redis.rpush("aftertime:simulation", run.id)
+                        enqueue_simulation(run.id)
+                except SimulationQueueUnavailable as exc:
+                    logger.warning("simulation run %s is waiting for queue recovery", run.id)
+                    run.status = "queue_waiting"; run.error = str(exc); db.commit()
                 except Exception as exc:
                     logger.exception("simulation run %s failed", run.id)
                     run.status = "failed"; run.error = str(exc); db.commit()

@@ -6,11 +6,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from redis import Redis
 from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.db import SessionLocal, get_db
 from app.models import (
     LabCheckpoint, LabComponentTest, LabComponentType, LabDashboardDefinition,
@@ -24,8 +22,29 @@ from app.models import (
 )
 from app.services.model_lab import _apply_script_result, execute_script, process_next, replay_scenario, validate_graph
 from app.services.model_contracts import connection_diagnostics, normalized_ports, observable_catalog, stable_key
+from app.services.run_queue import SimulationQueueUnavailable, enqueue_simulation
 
 router = APIRouter(prefix="/api/v1/lab")
+
+
+def enqueue_run_or_503(db: Session, run: LabRun) -> None:
+    try:
+        enqueue_simulation(run.id)
+    except SimulationQueueUnavailable as exc:
+        run.status = "queue_waiting"
+        run.error = (
+            "Черга симуляції недоступна. Запуск збережено; "
+            "відновіть сервіс черги та натисніть «resume»."
+        )
+        db.commit()
+        raise HTTPException(
+            503,
+            {
+                "message": run.error,
+                "run_id": run.id,
+                "retryable": True,
+            },
+        ) from exc
 
 
 def row(item):
@@ -511,7 +530,9 @@ def start_run(body: dict[str, Any], db: Session = Depends(get_db)) -> dict:
     for index, event in enumerate(([] if scripted else scenario.events if scenario else []) + body.get("events", []), 1):
         at = datetime.fromisoformat(event["at"]); at = at.replace(tzinfo=UTC) if at.tzinfo is None else at
         db.add(LabRunEvent(run_id=run.id, sequence=index, scheduled_at=at, priority=int(event.get("priority", 100)), event_type=event["event_type"], target_node_id=event.get("target_node_id"), origin=event.get("origin", "scenario"), payload=event.get("payload", {})))
-    db.commit(); Redis.from_url(settings.redis_url, decode_responses=True).rpush("aftertime:simulation", run.id); return row(run)
+    db.commit()
+    enqueue_run_or_503(db, run)
+    return row(run)
 
 
 @router.get("/runs/{run_id}")
@@ -554,7 +575,7 @@ def seek(run_id: str, body: dict[str, Any], db: Session = Depends(get_db)) -> di
     source.status = "paused"
     if target > source.current_time:
         source.run_until = target; source.status = "running"; db.commit()
-        Redis.from_url(settings.redis_url, decode_responses=True).rpush("aftertime:simulation", source.id)
+        enqueue_run_or_503(db, source)
         return get_run(source.id, db)
     checkpoint = db.scalar(select(LabCheckpoint).where(LabCheckpoint.run_id == run_id, LabCheckpoint.model_time <= target).order_by(LabCheckpoint.model_time.desc()).limit(1))
     if not checkpoint: raise HTTPException(409, "Move the run forward once to create the first checkpoint")
@@ -592,7 +613,7 @@ def command(run_id: str, body: dict[str, Any], db: Session = Depends(get_db)) ->
     run = db.get(LabRun, run_id); action = body["action"]
     if action in {"pause", "resume", "stop", "step"}:
         if action == "pause": run.status = "paused"
-        elif action == "resume": run.status = "running"
+        elif action == "resume": run.status = "running"; run.error = None
         elif action == "stop": run.status = "stopped"
         else: run.status = "paused"; process_next(db, run)
     elif action == "speed": run.speed = max(.001, float(body["value"])); run.idle_speed = run.speed
@@ -604,7 +625,7 @@ def command(run_id: str, body: dict[str, Any], db: Session = Depends(get_db)) ->
     else: raise HTTPException(422, "Unknown command")
     db.commit()
     if action == "resume":
-        Redis.from_url(settings.redis_url, decode_responses=True).rpush("aftertime:simulation", run.id)
+        enqueue_run_or_503(db, run)
     return row(run)
 
 

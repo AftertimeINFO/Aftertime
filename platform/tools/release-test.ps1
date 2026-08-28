@@ -54,6 +54,17 @@ try {
     Invoke-GateStep 'Runtime startup' {
         docker compose up -d --force-recreate api worker frontend
     }
+    Invoke-GateStep 'Simulation queue health' {
+        $redisReply = (docker compose exec -T redis redis-cli ping).Trim()
+        if ($redisReply -ne 'PONG') { throw "Redis health check failed: $redisReply" }
+
+        $workerId = (docker compose ps -q worker).Trim()
+        if (-not $workerId) { throw 'Simulation worker container is missing' }
+        $workerState = (docker inspect --format '{{.State.Status}}' $workerId).Trim()
+        if ($workerState -ne 'running') {
+            throw "Simulation worker is not running: $workerState"
+        }
+    }
 
     $healthy = $false
     for ($attempt = 0; $attempt -lt 30; $attempt++) {

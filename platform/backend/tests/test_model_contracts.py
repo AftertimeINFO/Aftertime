@@ -5,10 +5,10 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
-from app.api.model_lab import add_edge
+from app.api.model_lab import add_edge, start_run
 from app.db import SessionLocal
 from app.lab_seed import component_ports
-from app.models import LabEdge
+from app.models import LabEdge, LabRun
 from app.services.model_contracts import (
     connection_diagnostics,
     normalized_ports,
@@ -16,6 +16,7 @@ from app.services.model_contracts import (
 )
 from app.services.model_lab import _ordered_nodes, validate_graph
 from app.services.cep import evaluate_rules
+from app.services.run_queue import SimulationQueueUnavailable
 
 
 def component(component_id: str, category: str, output: str):
@@ -150,3 +151,27 @@ def test_rejected_emission_to_gas_connection_does_not_poison_model():
         assert any("emission → natural_gas" in item for item in rejected.value.detail["errors"])
         assert before == after
         assert validate_graph(db, "energy-draft")["valid"] is True
+
+
+def test_unavailable_simulation_queue_returns_retryable_503(monkeypatch):
+    """Regression: a corrupted Redis AOF previously surfaced as an opaque HTTP 500."""
+    def unavailable(_run_id: str) -> None:
+        raise SimulationQueueUnavailable("queue offline")
+
+    monkeypatch.setattr("app.api.model_lab.enqueue_simulation", unavailable)
+    with SessionLocal() as db:
+        with pytest.raises(HTTPException) as rejected:
+            start_run({
+                "model_version_id": "energy-published",
+                "scenario_id": "baseline",
+                "duration_seconds": 60,
+            }, db)
+
+        detail = rejected.value.detail
+        run = db.get(LabRun, detail["run_id"])
+        assert rejected.value.status_code == 503
+        assert detail["retryable"] is True
+        assert run.status == "queue_waiting"
+        assert "resume" in run.error
+        db.delete(run)
+        db.commit()
