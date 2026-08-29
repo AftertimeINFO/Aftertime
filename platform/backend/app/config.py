@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     environment: str = "local"
     database_url: str = "postgresql+psycopg://aftertime:aftertime-local@postgres:5432/aftertime"
     redis_url: str = "redis://redis:6379/0"
-    api_cors_origins: str = "http://localhost:8080,http://localhost:5173"
+    api_cors_origins: str = "http://localhost:8080,http://localhost:8083,http://localhost:5173"
     sync_poll_seconds: int = 5
     sync_http_timeout_seconds: int = 30
 

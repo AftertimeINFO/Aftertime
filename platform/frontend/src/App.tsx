@@ -25,6 +25,7 @@ import {
   resolveSeriesNodeId,
 } from "./chartNavigation";
 import { DEFAULT_SCENARIO_ID, shouldAutoStartDefaultScenario } from "./startup";
+import { scenarioForModel, selectableModels } from "./modelNavigation";
 
 const palette: Record<string, string> = {
   resource: "#64d8cb",
@@ -421,8 +422,30 @@ export default function App() {
           </b>
         </div>
         <div className="model-tools">
-          <select aria-label="Модель" value={w.project.id} onChange={(event) => { setProjectId(event.target.value); setSelectedId(null); setSelectedEdgeId(null); }}>
+          <select aria-label="Проєкт" value={w.project.id} onChange={(event) => { setProjectId(event.target.value); setSelectedId(null); setSelectedEdgeId(null); }}>
             {(w.projects || [w.project]).map((project: Row) => <option value={project.id} key={project.id}>{project.name}</option>)}
+          </select>
+          <select aria-label="Модель" value={viewVersion?.id || w.version.id} onChange={async (event) => {
+            const modelVersionId = event.target.value;
+            const linkedScenario = scenarioForModel(w.scenarios, modelVersionId);
+            setRun(null);
+            setSelectedId(null);
+            setSelectedEdgeId(null);
+            if (linkedScenario && linkedScenario.id !== scenario) {
+              setScenario(linkedScenario.id);
+              return;
+            }
+            const graph = await api.graph(modelVersionId);
+            setViewVersion(graph.version);
+            setGraphRows(graph.nodes);
+            setEdgeRows(graph.edges);
+            setObservables(graph.observables || []);
+            setNodes(modelNodes(graph.nodes, w.components));
+            setEdges(modelEdges(graph.edges));
+          }}>
+            {selectableModels(w.models || [w.version]).map((model: Row) => (
+              <option value={model.id} key={model.id}>{model.name} · v{model.version} · {model.status}</option>
+            ))}
           </select>
           <button onClick={async () => {
             const name = window.prompt("Назва нової моделі");

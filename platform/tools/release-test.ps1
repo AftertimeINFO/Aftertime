@@ -54,6 +54,25 @@ try {
     Invoke-GateStep 'Runtime startup' {
         docker compose up -d --force-recreate api worker frontend
     }
+    Invoke-GateStep 'Frontend runtime health' {
+        $frontendHealthy = $false
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            $frontendId = (docker compose ps -q frontend).Trim()
+            if ($frontendId) {
+                $frontendState = (docker inspect --format '{{.State.Status}}' $frontendId).Trim()
+                try {
+                    $frontendReply = (Invoke-RestMethod -Uri 'http://localhost:8083/healthz' -TimeoutSec 2).Trim()
+                    if ($frontendState -eq 'running' -and $frontendReply -eq 'ok') {
+                        $frontendHealthy = $true
+                        break
+                    }
+                }
+                catch { }
+            }
+            Start-Sleep -Seconds 1
+        }
+        if (-not $frontendHealthy) { throw 'Model Lab frontend is not running on port 8083' }
+    }
     Invoke-GateStep 'Simulation queue health' {
         $redisReply = (docker compose exec -T redis redis-cli ping).Trim()
         if ($redisReply -ne 'PONG') { throw "Redis health check failed: $redisReply" }

@@ -2,7 +2,7 @@
 
 ## Model Lab
 
-Локальна робоча Model Lab доступна на `http://localhost:8080` після запуску
+Локальна робоча Model Lab доступна на `http://localhost:8083` після запуску
 `docker compose up --build -d`. Інтерфейс дозволяє складати граф із компонентів,
 редагувати параметри та Python-контракти, окремо тестувати вузли, публікувати
 незмінні snapshots, керувати модельним часом і вручну або за календарем
@@ -33,7 +33,7 @@ docker compose up --build -d
 
 After startup:
 
-- interface: http://localhost:8080
+- interface: http://localhost:8083
 - API: http://localhost:8000
 - OpenAPI: http://localhost:8000/docs
 - health check: http://localhost:8000/health
