@@ -11,8 +11,13 @@ A translation is available in
 1. Search existing Issues and Discussions.
 2. Open an Issue for a bounded task or a Discussion for a new direction.
 3. Agree on scope before investing in a large implementation.
-4. Fork the repository and create a focused branch.
-5. Submit a pull request explaining the evidence, assumptions and validation.
+4. Develop on `DEV`, tracking `origin/DEV`. The repository keeps only `main`
+   and `DEV`; do not create additional development branches.
+5. Validate changes on `DEV`, then merge `DEV` into `main` and push both
+   branches. Keep the evidence, assumptions and validation in the merge or PR.
+
+See [Git workflow](docs/en/GIT_WORKFLOW.md) /
+[Робота з Git](docs/uk/GIT_WORKFLOW.md) for commands and repository layout.
 
 Keep commits focused. Add tests or reproducible checks where applicable. Update
 all three language versions when changing shared project meaning; if you cannot

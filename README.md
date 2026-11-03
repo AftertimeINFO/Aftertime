@@ -1,5 +1,8 @@
 # Aftertime
 
+Development uses `DEV`, merged into `main`. See the
+[Git workflow and source layout](docs/en/GIT_WORKFLOW.md).
+
 > Agent-facing Level 1 documentation is maintained in English and duplicated
 > in Ukrainian. See the
 > [Level 1 documentation policy](docs/en/DOCUMENTATION_POLICY_L1.md).
