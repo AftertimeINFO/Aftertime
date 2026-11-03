@@ -1,0 +1,9 @@
+{
+  "releaseTag": "model-lab-v0.4.0-rc.2",
+  "testedAt": "2026-08-28T21:19:29.7585703Z",
+  "commit": "ee84cd32adc9daab38bca92d7ee9313dc24dcc2b",
+  "architectureVersion": 2,
+  "observables": 61,
+  "eventTypes": 5,
+  "status": "passed"
+}

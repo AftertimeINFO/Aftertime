@@ -1,0 +1,186 @@
+import { useEffect, useRef, useState } from "react";
+import Modeler from "bpmn-js/lib/Modeler";
+import NavigatedViewer from "bpmn-js/lib/NavigatedViewer";
+import "bpmn-js/dist/assets/diagram-js.css";
+import "bpmn-js/dist/assets/bpmn-js.css";
+import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
+import { api, type Row } from "./api";
+
+type Props = {
+  workflow: Row;
+  immutable: boolean;
+  onSaved: (workflow: Row) => void;
+  onValidation: (validation: Row) => void;
+  onError: (message: string) => void;
+};
+
+const EVENT_OPTIONS: Record<string, { value: string; label: string; definition?: string }[]> = {
+  "bpmn:StartEvent": [
+    { value: "none", label: "Без тригера" },
+    { value: "message", label: "Повідомлення", definition: "bpmn:MessageEventDefinition" },
+    { value: "timer", label: "Таймер", definition: "bpmn:TimerEventDefinition" },
+    { value: "conditional", label: "Умова", definition: "bpmn:ConditionalEventDefinition" },
+    { value: "signal", label: "Сигнал", definition: "bpmn:SignalEventDefinition" },
+    { value: "multiple", label: "Кілька тригерів" },
+    { value: "parallel_multiple", label: "Паралельні тригери" },
+  ],
+  "bpmn:EndEvent": [
+    { value: "none", label: "Звичайне завершення" },
+    { value: "message", label: "Надіслати повідомлення", definition: "bpmn:MessageEventDefinition" },
+    { value: "signal", label: "Надіслати сигнал", definition: "bpmn:SignalEventDefinition" },
+    { value: "error", label: "Помилка", definition: "bpmn:ErrorEventDefinition" },
+    { value: "escalation", label: "Ескалація", definition: "bpmn:EscalationEventDefinition" },
+    { value: "terminate", label: "Завершити весь процес", definition: "bpmn:TerminateEventDefinition" },
+  ],
+  "bpmn:IntermediateCatchEvent": [
+    { value: "message", label: "Очікувати повідомлення", definition: "bpmn:MessageEventDefinition" },
+    { value: "timer", label: "Очікувати таймер", definition: "bpmn:TimerEventDefinition" },
+    { value: "conditional", label: "Очікувати умову", definition: "bpmn:ConditionalEventDefinition" },
+    { value: "signal", label: "Очікувати сигнал", definition: "bpmn:SignalEventDefinition" },
+  ],
+  "bpmn:IntermediateThrowEvent": [
+    { value: "message", label: "Надіслати повідомлення", definition: "bpmn:MessageEventDefinition" },
+    { value: "signal", label: "Надіслати сигнал", definition: "bpmn:SignalEventDefinition" },
+    { value: "escalation", label: "Ескалація", definition: "bpmn:EscalationEventDefinition" },
+  ],
+  "bpmn:BoundaryEvent": [
+    { value: "message", label: "Повідомлення", definition: "bpmn:MessageEventDefinition" },
+    { value: "timer", label: "Таймер", definition: "bpmn:TimerEventDefinition" },
+    { value: "signal", label: "Сигнал", definition: "bpmn:SignalEventDefinition" },
+    { value: "error", label: "Помилка", definition: "bpmn:ErrorEventDefinition" },
+  ],
+};
+
+function eventKind(element: any): string {
+  if (element?.businessObject?.parallelMultiple) return "parallel_multiple";
+  if ((element?.businessObject?.eventDefinitions?.length || 0) > 1) return "multiple";
+  const definition = element?.businessObject?.eventDefinitions?.[0]?.$type || "";
+  return ({
+    "bpmn:MessageEventDefinition": "message",
+    "bpmn:TimerEventDefinition": "timer",
+    "bpmn:ConditionalEventDefinition": "conditional",
+    "bpmn:SignalEventDefinition": "signal",
+    "bpmn:ErrorEventDefinition": "error",
+    "bpmn:EscalationEventDefinition": "escalation",
+    "bpmn:TerminateEventDefinition": "terminate",
+  } as Record<string, string>)[definition] || "none";
+}
+
+export function BpmnEditor({ workflow, immutable, onSaved, onValidation, onError }: Props) {
+  const container = useRef<HTMLDivElement | null>(null);
+  const editor = useRef<any>(null);
+  const [selected, setSelected] = useState<any>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!container.current || !workflow?.version?.bpmn_xml) return;
+    const instance: any = immutable
+      ? new NavigatedViewer({ container: container.current })
+      : new Modeler({ container: container.current, keyboard: { bindTo: window } });
+    editor.current = instance;
+    let alive = true;
+    instance.importXML(workflow.version.bpmn_xml).then(({ warnings }: any) => {
+      if (!alive) return;
+      instance.get("canvas").zoom("fit-viewport");
+      if (warnings?.length) onError(warnings.map((item: any) => item.message || String(item)).join(" · "));
+    }).catch((error: unknown) => onError(`Не вдалося відкрити BPMN XML: ${String(error)}`));
+    const eventBus = instance.get("eventBus");
+    const select = (event: any) => setSelected(event.newSelection?.[0] || null);
+    eventBus.on("selection.changed", select);
+    if (!immutable) eventBus.on("commandStack.changed", () => setDirty(true));
+    return () => {
+      alive = false;
+      instance.destroy();
+      editor.current = null;
+      setSelected(null);
+      setDirty(false);
+    };
+  }, [workflow?.version?.id, workflow?.version?.bpmn_xml, immutable, onError]);
+
+  const updateName = (name: string) => {
+    if (!editor.current || !selected || immutable) return;
+    editor.current.get("modeling").updateProperties(selected, { name });
+    setSelected({ ...selected });
+  };
+  const updateExtension = (key: string, value: string) => {
+    if (!editor.current || !selected || immutable) return;
+    selected.businessObject.$attrs ||= {};
+    selected.businessObject.$attrs[`aftertime:${key}`] = value;
+    editor.current.get("eventBus").fire("elements.changed", { elements: [selected] });
+    setDirty(true);
+    setSelected({ ...selected });
+  };
+  const changeEventKind = (kind: string) => {
+    if (!editor.current || !selected || immutable) return;
+    const option = EVENT_OPTIONS[selected.type]?.find((item) => item.value === kind);
+    try {
+      if (kind === "multiple" || kind === "parallel_multiple") {
+        const moddle = editor.current.get("moddle");
+        editor.current.get("modeling").updateProperties(selected, {
+          eventDefinitions: [
+            moddle.create("bpmn:MessageEventDefinition"),
+            moddle.create("bpmn:SignalEventDefinition"),
+          ],
+          parallelMultiple: kind === "parallel_multiple",
+        });
+        setSelected({ ...selected });
+        return;
+      }
+      const replacement = editor.current.get("bpmnReplace").replaceElement(selected, {
+        type: selected.type,
+        ...(option?.definition ? { eventDefinitionType: option.definition } : {}),
+      });
+      setSelected(replacement);
+    } catch (error) {
+      onError(`Тип події не можна застосувати в цьому місці: ${String(error)}`);
+    }
+  };
+  const save = async () => {
+    if (!editor.current || immutable) return;
+    setSaving(true);
+    try {
+      const { xml } = await editor.current.saveXML({ format: true });
+      const saved = await api.saveWorkflowBpmn(workflow.version.id, xml);
+      setDirty(false);
+      onValidation(saved.validation || saved.version?.validation || {});
+      onSaved(saved);
+    } catch (error) {
+      onError(String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const type = selected?.type || "";
+  const eventOptions = EVENT_OPTIONS[type] || [];
+  const attrs = selected?.businessObject?.$attrs || {};
+  return <div className={`native-bpmn-editor ${immutable ? "readonly" : "editable"}`}>
+    <div className="native-bpmn-canvas" ref={container} />
+    {!immutable && <div className="bpmn-save-strip">
+      <span>{dirty ? "Є незбережені зміни" : "BPMN XML синхронізовано"}</span>
+      <button disabled={!dirty || saving} onClick={save}>{saving ? "Збереження…" : "Зберегти BPMN"}</button>
+    </div>}
+    {selected && <aside className="bpmn-properties">
+      <small>ВЛАСТИВОСТІ BPMN</small>
+      <b>{type.replace("bpmn:", "")}</b>
+      <label>Назва<input readOnly={immutable} value={selected.businessObject?.name || ""} onChange={(event) => updateName(event.target.value)} /></label>
+      {!!eventOptions.length && <label>Тип події<select disabled={immutable} value={eventKind(selected)} onChange={(event) => changeEventKind(event.target.value)}>{eventOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>}
+      {!!eventOptions.length && eventKind(selected) !== "none" && <label>Тригер / результат<input readOnly={immutable} value={attrs["aftertime:eventRef"] || ""} placeholder="Наприклад: repair.completed" onChange={(event) => updateExtension("eventRef", event.target.value)} /></label>}
+      {/Task$|Activity$|SubProcess$/.test(type) && <><label>Об’єкт<input readOnly={immutable} value={attrs["aftertime:targetRef"] || ""} onChange={(event) => updateExtension("targetRef", event.target.value)} /></label><label>Дія / capability<input readOnly={immutable} value={attrs["aftertime:capability"] || ""} onChange={(event) => updateExtension("capability", event.target.value)} /></label></>}
+      {type === "bpmn:BoundaryEvent" && <label className="check"><input type="checkbox" disabled={immutable} checked={selected.businessObject?.cancelActivity !== false} onChange={(event) => editor.current.get("modeling").updateProperties(selected, { cancelActivity: event.target.checked })} /> Переривати активну роботу</label>}
+      <span>Використовуйте контекстне меню елемента для зміни типу задачі, gateway або події.</span>
+    </aside>}
+  </div>;
+}
+
+export function BpmnCollaboration({ xml }: { xml: string }) {
+  const container = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!container.current || !xml) return;
+    const viewer: any = new NavigatedViewer({ container: container.current });
+    viewer.importXML(xml).then(() => viewer.get("canvas").zoom("fit-viewport")).catch(() => {});
+    return () => viewer.destroy();
+  }, [xml]);
+  return <div className="bpmn-collaboration"><header><small>BPMN 2.0 · COLLABORATION</small><b>Взаємодія організацій</b><span>Message Flow з’єднує окремі pools; відкрийте процес із таблиці для редагування.</span></header><div ref={container} /></div>;
+}

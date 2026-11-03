@@ -1,8 +1,15 @@
 # Aftertime
 
+Development uses `DEV`, merged into `main`. See the
+[Git workflow and source layout](docs/en/GIT_WORKFLOW.md).
+
+> Agent-facing Level 1 documentation is maintained in English and duplicated
+> in Ukrainian. See the
+> [Level 1 documentation policy](docs/en/DOCUMENTATION_POLICY_L1.md).
+
 **A planetary balance of matter and energy.**
 
-[Українська](README.uk.md) · [Русский](README.ru.md)
+[en](README.md) · [uk](README.uk.md)
 
 Humanity manages companies, states and economies through money, securities, laws
 and borders. These systems shape our lives, but they are human-made abstractions:
