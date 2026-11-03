@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.lab_seed import PROCESS_SCRIPT, SCRIPT
-from app.models import LabProject, LabScenario, LabScenarioEventTemplate, LabWorkflowNode, LabWorkflowVersion
+from app.models import LabMonitorTemplate, LabProject, LabScenario, LabScenarioEventTemplate, LabWorkflowNode, LabWorkflowVersion
 from app.services.model_lab import execute_script, replay_scenario
 
 
@@ -39,11 +39,29 @@ def test_runaway_python_is_terminated():
 def test_release_gate_replays_all_15_scenarios():
     with SessionLocal() as db:
         project = db.scalar(select(LabProject).where(LabProject.id == "model-lab-energy"))
-        scenarios = list(db.scalars(select(LabScenario).where(LabScenario.id != "baseline")))
+        scenarios = [
+            scenario
+            for scenario in db.scalars(
+                select(LabScenario).where(LabScenario.id != "baseline")
+            )
+            if not scenario.configuration.get("deprecated")
+        ]
         assert len(scenarios) == 15
         assert len({scenario.model_version_id for scenario in scenarios}) == 15
         reports = [replay_scenario(db, scenario, scenario.model_version_id) for scenario in scenarios]
         assert all(report["passed"] for report in reports)
+
+
+def test_active_draft_has_a_monitor_template():
+    with SessionLocal() as db:
+        project = db.get(LabProject, "model-lab-energy")
+        assert project.active_draft_id
+        monitor = db.scalar(
+            select(LabMonitorTemplate).where(
+                LabMonitorTemplate.model_version_id == project.active_draft_id
+            )
+        )
+        assert monitor is not None
 
 
 def test_storm_arwen_is_a_scripted_package_with_24h_lead_in():
@@ -64,8 +82,8 @@ def test_storm_arwen_keeps_plant_energized_when_consumer_point_loses_voltage():
         scenario = db.get(LabScenario, "storm-arwen-2021")
         report = replay_scenario(db, scenario, scenario.model_version_id)
         first_fault = report["trace"][0]["metrics"]
-        plant = first_fault["node_metrics"]["q11-steam-plant"]
-        consumer = first_fault["node_metrics"]["q11-refrigerator"]
+        plant = first_fault["node_metrics"]["ar-upstream-generation"]
+        consumer = first_fault["node_metrics"]["ar-customers"]
         assert first_fault["frequency_hz"] == 50
         assert plant["voltage_pu"] > .95 and plant["frequency_hz"] == 50
         assert consumer["voltage_pu"] == 0 and consumer["frequency_hz"] == 0

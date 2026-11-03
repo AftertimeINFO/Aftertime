@@ -9,6 +9,7 @@ describe("model navigation", () => {
       { id: "draft", name: "Робоча чернетка", status: "draft", version: 2 },
       { id: "storm", name: "Storm Arwen", status: "published", version: 11 },
       { id: "base", name: "Еталонний контур", status: "published", version: 1 },
+      { id: "legacy", name: "San Bruno / Sissonville", settings: { deprecated: true } },
     ];
 
     expect(selectableModels(models).map((model) => model.id).sort()).toEqual([
@@ -22,9 +23,11 @@ describe("model navigation", () => {
     const scenarios = [
       { id: "baseline", model_version_id: "base" },
       { id: "storm-arwen-2021", model_version_id: "storm" },
+      { id: "legacy", model_version_id: "legacy", configuration: { deprecated: true } },
     ];
 
     expect(scenarioForModel(scenarios, "storm")?.id).toBe("storm-arwen-2021");
+    expect(scenarioForModel(scenarios, "legacy")).toBeUndefined();
     expect(scenarioForModel(scenarios, "draft")).toBeUndefined();
   });
 });

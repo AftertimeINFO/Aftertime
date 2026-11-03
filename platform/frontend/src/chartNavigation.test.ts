@@ -7,6 +7,7 @@ import {
   diagnosticSeriesValue,
   formatDiagnosticValue,
   preferredDiagnosticPoint,
+  reconcileDiagnosticSets,
   resolveSeriesNodeId,
 } from "./chartNavigation";
 
@@ -24,6 +25,26 @@ describe("chart-to-graph navigation", () => {
     expect(resolveSeriesNodeId(nodes, { target_id: "plant" })).toBe("plant");
     expect(resolveSeriesNodeId(nodes, { target_key: "led-1" })).toBe("lamp");
     expect(resolveSeriesNodeId(nodes, { point_component_type: "tpp" })).toBe("plant");
+  });
+
+  it("removes series from another event model and creates model-scoped defaults", () => {
+    const eventNodes = [
+      { id: "sw-hng", instance_key: "sw-hng", component_type_id: "transmission-corridor" },
+      { id: "sw-songs", instance_key: "sw-songs", component_type_id: "nuclear-plant" },
+    ];
+    const eventCatalog = [
+      { target_id: "sw-hng", target_key: "sw-hng", address: "component:sw-hng:voltage_pu", metric_key: "voltage_pu", value_type: "number" },
+      { target_id: "sw-songs", target_key: "sw-songs", address: "component:sw-songs:electric_power_mw", metric_key: "electric_power_mw", value_type: "number" },
+    ];
+    const result = reconcileDiagnosticSets(
+      [{ id: "legacy", series: [{ target_id: "q11-led", metric_key: "voltage_pu" }] }],
+      eventNodes,
+      eventCatalog,
+    );
+
+    expect(result[0].id).toBe("event-model-diagnostics");
+    expect(result[0].series.map((series: any) => series.target_id)).toEqual(["sw-hng", "sw-songs"]);
+    expect(result[0].series.some((series: any) => series.target_id === "q11-led")).toBe(false);
   });
 
   it("uses a selected graph node only when it has numeric observables", () => {

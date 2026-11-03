@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from app.db import SessionLocal
 from app.models import Entity, LabProject, ProcessModel, Relation, Route, Scenario, Source
 from app.lab_seed import seed_model_lab
+from app.participant_catalog import seed_participant_process_pilots
 
 ENTITIES = [
     ("ua", "state", "institutional", "Ukraine", "UA"),
@@ -175,7 +176,17 @@ def seed(*, if_empty: bool = False) -> None:
         seed_model_lab(db)
 
 
+def seed_participants() -> None:
+    """Apply additive, idempotent participant/process pilots to an existing lab."""
+    with SessionLocal() as db:
+        seed_participant_process_pilots(db)
+        db.commit()
+
+
 if __name__ == "__main__":
     import sys
 
-    seed(if_empty="--if-empty" in sys.argv)
+    if "--participants" in sys.argv:
+        seed_participants()
+    else:
+        seed(if_empty="--if-empty" in sys.argv)

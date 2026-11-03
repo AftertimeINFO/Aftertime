@@ -33,6 +33,9 @@ try {
         try { npm audit --audit-level=high } finally { Pop-Location }
     }
     Invoke-GateStep 'Container images' { docker compose build api worker frontend }
+    Invoke-GateStep 'Development database migration' {
+        docker compose run --rm api alembic upgrade head
+    }
     Invoke-GateStep 'Backend regression tests' {
         docker compose run --rm api python -m pytest -q
     }
@@ -48,9 +51,6 @@ try {
         docker compose exec -T postgres dropdb --if-exists -U aftertime $testDatabase
     }
 
-    Invoke-GateStep 'Development database migration' {
-        docker compose run --rm api alembic upgrade head
-    }
     Invoke-GateStep 'Runtime startup' {
         docker compose up -d --force-recreate api worker frontend
     }
@@ -101,6 +101,48 @@ try {
     if ($workspace.event_types.Count -lt 1) { throw 'Event type catalog is empty' }
     if ($workspace.monitors.Count -lt 1) { throw 'Monitor template is missing' }
 
+    $pilotGate = Invoke-RestMethod `
+        -Uri 'http://localhost:8000/api/v1/lab/qualification/pilots' `
+        -TimeoutSec 30
+    if (-not $pilotGate.passed) {
+        $pilotErrors = @(
+            $pilotGate.results |
+                Where-Object { -not $_.passed } |
+                ForEach-Object { "$( $_.package_id ): $( $_.errors -join '; ' )" }
+        ) -join ' | '
+        throw "L1 pilot qualification failed: $pilotErrors"
+    }
+    if ($pilotGate.passed_count -ne 15 -or $pilotGate.required_count -ne 15) {
+        throw 'L1 qualification must replay exactly fifteen approved packages'
+    }
+    $pilotVersions = @(
+        'qualification-san-bruno-2010',
+        'qualification-northeast-2003',
+        'qualification-storm-arwen-2021'
+        'qualification-gb-2019'
+        'qualification-south-australia-2016'
+        'qualification-hokkaido-2018'
+        'qualification-southwest-2011'
+        'qualification-india-2012'
+        'qualification-texas-2021'
+        'qualification-iberia-2025'
+        'qualification-north-hyde-2025'
+        'qualification-kleen-energy'
+        'qualification-macondo'
+        'qualification-ua-md-2026'
+        'qualification-ukraine-attacks'
+    )
+    $pilotDefinitions = @(
+        $pilotVersions | ForEach-Object {
+            (Invoke-RestMethod `
+                -Uri "http://localhost:8000/api/v1/lab/versions/$_/qualification-definition" `
+                -TimeoutSec 10).item
+        }
+    )
+    if ($pilotDefinitions.Count -ne 15 -or @($pilotDefinitions | Where-Object { -not $_ }).Count) {
+        throw 'All fifteen L1 packages must have versioned qualification definitions'
+    }
+
     Invoke-GateStep 'Git diff integrity' { git diff --check }
 
     $evidence = [ordered]@{
@@ -110,9 +152,29 @@ try {
         architectureVersion = $workspace.version.architecture_version
         observables = $workspace.observables.Count
         eventTypes = $workspace.event_types.Count
+        pilotQualification = [ordered]@{
+            passed = $pilotGate.passed
+            passedCount = $pilotGate.passed_count
+            requiredCount = $pilotGate.required_count
+            checksums = @(
+                $pilotGate.results |
+                    ForEach-Object { [ordered]@{ package = $_.package_id; checksum = $_.checksum } }
+            )
+            definitions = @(
+                $pilotDefinitions |
+                    ForEach-Object {
+                        [ordered]@{
+                            scenario = $_.scenario_id
+                            package = $_.package_id
+                            revision = $_.revision
+                            modelVersion = $_.model_version_id
+                        }
+                    }
+            )
+        }
         status = 'passed'
     }
-    $evidence | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $evidenceRoot 'release-gate.json')
+    $evidence | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 (Join-Path $evidenceRoot 'release-gate.json')
     Write-Host "`nRelease gate PASSED: $ReleaseTag" -ForegroundColor Green
 }
 finally {

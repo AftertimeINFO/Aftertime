@@ -1,6 +1,6 @@
 # Як долучитися
 
-[English](../en/PARTICIPATE.md) · [Русский](../ru/PARTICIPATE.md) · [Головна](../../README.uk.md)
+[en](../en/PARTICIPATE.md) · [uk](PARTICIPATE.md) · [home](../../README.uk.md)
 
 Aftertime більший за програмний проєкт. Внесок може бути науковим, технічним,
 інституційним, фінансовим або комунікаційним.

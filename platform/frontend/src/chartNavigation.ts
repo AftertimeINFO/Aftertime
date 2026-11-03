@@ -11,6 +11,59 @@ export function resolveSeriesNodeId(nodes: Row[], series: Row): string | undefin
 }
 
 
+export function reconcileDiagnosticSets(
+  configured: Row[],
+  nodes: Row[],
+  catalog: Row[],
+): Row[] {
+  const isValid = (series: Row) => {
+    const nodeId = resolveSeriesNodeId(nodes, series);
+    const metricKey = series.metric_key || series.metric;
+    return Boolean(
+      nodeId &&
+      catalog.some(
+        (item) =>
+          item.target_id === nodeId &&
+          item.value_type === "number" &&
+          item.metric_key === metricKey,
+      ),
+    );
+  };
+  const compatible = configured
+    .map((set) => ({ ...set, series: (set.series || []).filter(isValid) }))
+    .filter((set) => set.series.length);
+  if (compatible.length) return compatible;
+
+  const priorities = ["voltage_pu", "frequency_hz", "electric_power_mw"];
+  const fallback: Row[] = [];
+  for (const node of nodes) {
+    const observable = priorities
+      .map((metricKey) =>
+        catalog.find(
+          (item) =>
+            item.target_id === node.id &&
+            item.value_type === "number" &&
+            item.metric_key === metricKey,
+        ),
+      )
+      .find(Boolean);
+    if (!observable) continue;
+    fallback.push({
+      target_id: node.id,
+      target_key: observable.target_key,
+      address: observable.address,
+      metric_key: observable.metric_key,
+      style: "line",
+      color: ["#f0bd63", "#b7f34a", "#64d8cb"][fallback.length % 3],
+    });
+    if (fallback.length === 3) break;
+  }
+  return fallback.length
+    ? [{ id: "event-model-diagnostics", name: "Діагностика моделі", series: fallback }]
+    : [];
+}
+
+
 export function diagnosticSeriesValue(
   sample: Row,
   nodes: Row[],

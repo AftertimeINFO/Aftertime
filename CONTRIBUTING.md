@@ -3,8 +3,8 @@
 Thank you for helping build an open planetary balance of matter and energy.
 
 Read [How to participate](docs/en/PARTICIPATE.md) before opening a contribution.
-Translations are available in
-[Ukrainian](docs/uk/PARTICIPATE.md) and [Russian](docs/ru/PARTICIPATE.md).
+A translation is available in
+[Ukrainian](docs/uk/PARTICIPATE.md).
 
 ## Workflow
 

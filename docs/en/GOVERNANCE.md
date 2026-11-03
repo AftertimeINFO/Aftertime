@@ -1,6 +1,6 @@
 # Governance principles
 
-[Українська](../uk/GOVERNANCE.md) · [Русский](../ru/GOVERNANCE.md) · [Home](../../README.md)
+[en](GOVERNANCE.md) · [uk](../uk/GOVERNANCE.md) · [home](../../README.md)
 
 This is an initial governance framework. A ratified governance model will be
 developed openly as the contributor community forms.

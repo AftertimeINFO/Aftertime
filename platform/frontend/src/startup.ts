@@ -1,4 +1,4 @@
-export const DEFAULT_SCENARIO_ID = "storm-arwen-2021";
+export const DEFAULT_SCENARIO_ID = "southwest-2011";
 
 type AutoStartState = {
   scenarioId: string;
@@ -18,4 +18,11 @@ export function shouldAutoStartDefaultScenario(state: AutoStartState): boolean {
       !state.runExists &&
       !state.alreadyRequested,
   );
+}
+
+export function runModelVersionId(
+  scenarioModelVersionId: string | undefined,
+  publishedModelVersionId: string,
+): string {
+  return scenarioModelVersionId || publishedModelVersionId;
 }

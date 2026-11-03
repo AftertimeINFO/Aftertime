@@ -245,6 +245,9 @@ class LabScenario(Base):
     pre_event_seconds: Mapped[int] = mapped_column(Integer, default=86400)
     post_event_seconds: Mapped[int] = mapped_column(Integer, default=86400)
     configuration: Mapped[dict] = mapped_column(JSONB, default=dict)
+    assembly_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("lab_scenario_assembly_versions.id", use_alter=True), index=True
+    )
 
 
 class LabRun(Base):
@@ -252,6 +255,9 @@ class LabRun(Base):
     id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
     model_version_id: Mapped[str] = mapped_column(ForeignKey("lab_model_versions.id"), index=True)
     scenario_id: Mapped[str | None] = mapped_column(ForeignKey("lab_scenarios.id"))
+    assembly_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("lab_scenario_assembly_versions.id"), index=True
+    )
     parent_run_id: Mapped[str | None] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(24), default="queued", index=True)
     current_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -397,9 +403,151 @@ class LabWorkflowVersion(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    bpmn_xml: Mapped[str] = mapped_column(Text, default="")
+    bpmn_profile: Mapped[str] = mapped_column(String(80), default="aftertime-executable-1")
+    validation: Mapped[dict] = mapped_column(JSONB, default=dict)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (UniqueConstraint("workflow_id", "version", name="uq_lab_workflow_version"),)
+
+
+class LabWorkflowDefinitionBackup(Base):
+    __tablename__ = "lab_workflow_definition_backups"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    workflow_version_id: Mapped[str] = mapped_column(String(80), index=True)
+    reason: Mapped[str] = mapped_column(String(120), default="bpmn-2-migration")
+    bpmn_xml: Mapped[str] = mapped_column(Text, default="")
+    nodes: Mapped[list] = mapped_column(JSONB, default=list)
+    transitions: Mapped[list] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LabProcessSet(Base):
+    __tablename__ = "lab_process_sets"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    owner_entity_id: Mapped[str] = mapped_column(ForeignKey("entities.id"), index=True)
+    name: Mapped[str] = mapped_column(String(240), index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    scope_kind: Mapped[str] = mapped_column(String(40), default="asset_class", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LabProcessSetVersion(Base):
+    __tablename__ = "lab_process_set_versions"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    process_set_id: Mapped[str] = mapped_column(ForeignKey("lab_process_sets.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    name: Mapped[str] = mapped_column(String(240))
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    evidence: Mapped[list] = mapped_column(JSONB, default=list)
+    checksum: Mapped[str | None] = mapped_column(String(64))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("process_set_id", "version", name="uq_lab_process_set_version"),)
+
+
+class LabProcessSetWorkflow(Base):
+    __tablename__ = "lab_process_set_workflows"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    process_set_version_id: Mapped[str] = mapped_column(ForeignKey("lab_process_set_versions.id", ondelete="CASCADE"), index=True)
+    workflow_version_id: Mapped[str] = mapped_column(ForeignKey("lab_workflow_versions.id"), index=True)
+    scope_kind: Mapped[str] = mapped_column(String(40), default="actor")
+    scope_ref: Mapped[str | None] = mapped_column(String(160), index=True)
+    start_event_type: Mapped[str] = mapped_column(String(80), index=True)
+    start_mode: Mapped[str] = mapped_column(String(30), default="message")
+    correlation_key: Mapped[str] = mapped_column(String(120), default="scenario_event")
+    priority: Mapped[int] = mapped_column(Integer, default=100)
+    evidence: Mapped[dict] = mapped_column(JSONB, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (
+        UniqueConstraint("process_set_version_id", "workflow_version_id", "start_event_type", "scope_kind", "scope_ref", name="uq_lab_process_activation"),
+    )
+
+
+class LabAssetActorRole(Base):
+    __tablename__ = "lab_asset_actor_roles"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    model_version_id: Mapped[str] = mapped_column(ForeignKey("lab_model_versions.id", ondelete="CASCADE"), index=True)
+    node_id: Mapped[str] = mapped_column(ForeignKey("lab_nodes.id", ondelete="CASCADE"), index=True)
+    entity_id: Mapped[str] = mapped_column(ForeignKey("entities.id"), index=True)
+    role: Mapped[str] = mapped_column(String(40), index=True)
+    permissions: Mapped[list] = mapped_column(JSONB, default=list)
+    evidence: Mapped[dict] = mapped_column(JSONB, default=dict)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("model_version_id", "node_id", "entity_id", "role", name="uq_lab_asset_actor_role"),
+    )
+
+
+class LabScenarioAssemblyVersion(Base):
+    __tablename__ = "lab_scenario_assembly_versions"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    scenario_id: Mapped[str] = mapped_column(ForeignKey("lab_scenarios.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    name: Mapped[str] = mapped_column(String(240))
+    composite_model_version_id: Mapped[str | None] = mapped_column(ForeignKey("lab_model_versions.id"), index=True)
+    checksum: Mapped[str | None] = mapped_column(String(64))
+    validation: Mapped[dict] = mapped_column(JSONB, default=dict)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("scenario_id", "version", name="uq_lab_scenario_assembly_version"),)
+
+
+class LabScenarioAssemblyMember(Base):
+    __tablename__ = "lab_scenario_assembly_members"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    assembly_version_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_versions.id", ondelete="CASCADE"), index=True)
+    alias: Mapped[str] = mapped_column(String(80))
+    entity_id: Mapped[str] = mapped_column(ForeignKey("entities.id"), index=True)
+    model_version_id: Mapped[str | None] = mapped_column(ForeignKey("lab_model_versions.id"), index=True)
+    participant_kind: Mapped[str] = mapped_column(String(40), default="organization")
+    role: Mapped[str] = mapped_column(String(40), default="operator")
+    evidence: Mapped[dict] = mapped_column(JSONB, default=dict)
+    __table_args__ = (UniqueConstraint("assembly_version_id", "alias", name="uq_lab_assembly_member_alias"),)
+
+
+class LabScenarioProcessBinding(Base):
+    __tablename__ = "lab_scenario_process_bindings"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    assembly_version_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_versions.id", ondelete="CASCADE"), index=True)
+    member_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_members.id", ondelete="CASCADE"), index=True)
+    process_set_version_id: Mapped[str] = mapped_column(ForeignKey("lab_process_set_versions.id"), index=True)
+    __table_args__ = (UniqueConstraint("assembly_version_id", "member_id", "process_set_version_id", name="uq_lab_scenario_process_binding"),)
+
+
+class LabScenarioAssemblyNodeMap(Base):
+    __tablename__ = "lab_scenario_assembly_node_map"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    assembly_version_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_versions.id", ondelete="CASCADE"), index=True)
+    member_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_members.id", ondelete="CASCADE"), index=True)
+    source_node_id: Mapped[str] = mapped_column(String(80))
+    source_node_key: Mapped[str] = mapped_column(String(160), index=True)
+    composite_node_id: Mapped[str] = mapped_column(ForeignKey("lab_nodes.id", ondelete="CASCADE"), index=True)
+    qualified_ref: Mapped[str] = mapped_column(String(260), index=True)
+    __table_args__ = (
+        UniqueConstraint("assembly_version_id", "qualified_ref", name="uq_lab_assembly_qualified_ref"),
+        UniqueConstraint("assembly_version_id", "composite_node_id", name="uq_lab_assembly_composite_node"),
+    )
+
+
+class LabScenarioAssemblyLink(Base):
+    __tablename__ = "lab_scenario_assembly_links"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    assembly_version_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_versions.id", ondelete="CASCADE"), index=True)
+    source_member_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_members.id"))
+    source_node_key: Mapped[str] = mapped_column(String(160))
+    source_port: Mapped[str] = mapped_column(String(80))
+    target_member_id: Mapped[str] = mapped_column(ForeignKey("lab_scenario_assembly_members.id"))
+    target_node_key: Mapped[str] = mapped_column(String(160))
+    target_port: Mapped[str] = mapped_column(String(80))
+    flow_type: Mapped[str] = mapped_column(String(60))
+    domain: Mapped[str] = mapped_column(String(60), default="legacy.energy")
+    parameters: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 
 class LabWorkflowNode(Base):
@@ -434,6 +582,11 @@ class LabWorkflowInstance(Base):
     status: Mapped[str] = mapped_column(String(40), default="ready")
     current_node_id: Mapped[str | None] = mapped_column(String(80))
     variables: Mapped[dict] = mapped_column(JSONB, default=dict)
+    assembly_member_id: Mapped[str | None] = mapped_column(ForeignKey("lab_scenario_assembly_members.id"), index=True)
+    process_set_version_id: Mapped[str | None] = mapped_column(ForeignKey("lab_process_set_versions.id"), index=True)
+    trigger_event_id: Mapped[str | None] = mapped_column(ForeignKey("lab_run_events.id"), index=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(160), index=True)
+    target_ref: Mapped[str | None] = mapped_column(String(260), index=True)
 
 
 class LabWorkflowToken(Base):
@@ -566,6 +719,67 @@ class LabEventType(Base):
     payload_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
     severity: Mapped[str] = mapped_column(String(20), default="info")
     allow_broadcast: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class LabEventProgram(Base):
+    __tablename__ = "lab_event_programs"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    model_version_id: Mapped[str] = mapped_column(
+        ForeignKey("lab_model_versions.id", ondelete="CASCADE"), index=True
+    )
+    event_type_id: Mapped[str] = mapped_column(
+        ForeignKey("lab_event_types.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(180))
+    description: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    layout: Mapped[dict] = mapped_column(JSONB, default=dict)
+    __table_args__ = (
+        UniqueConstraint(
+            "model_version_id", "event_type_id", name="uq_lab_event_program_type"
+        ),
+    )
+
+
+class LabQualificationDefinition(Base):
+    """Editable strict event definition owned by a model-version snapshot."""
+
+    __tablename__ = "lab_qualification_definitions"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    model_version_id: Mapped[str] = mapped_column(
+        ForeignKey("lab_model_versions.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    package_id: Mapped[str] = mapped_column(String(100), index=True)
+    scenario_id: Mapped[str] = mapped_column(String(100), index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    document: Mapped[dict] = mapped_column(JSONB, default=dict)
+    __table_args__ = (
+        UniqueConstraint(
+            "model_version_id",
+            "package_id",
+            name="uq_lab_qualification_definition_package",
+        ),
+    )
+
+
+class LabEventAction(Base):
+    __tablename__ = "lab_event_actions"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    program_id: Mapped[str] = mapped_column(
+        ForeignKey("lab_event_programs.id", ondelete="CASCADE"), index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    action_type: Mapped[str] = mapped_column(String(60), index=True)
+    target_kind: Mapped[str | None] = mapped_column(String(30))
+    target_id: Mapped[str | None] = mapped_column(String(80))
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    x: Mapped[float] = mapped_column(Float, default=0)
+    y: Mapped[float] = mapped_column(Float, default=0)
+    __table_args__ = (
+        UniqueConstraint("program_id", "sequence", name="uq_lab_event_action_sequence"),
+    )
 
 
 class LabCepRule(Base):
