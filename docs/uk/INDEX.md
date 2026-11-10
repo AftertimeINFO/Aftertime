@@ -1,6 +1,6 @@
 ---
 document_id: aftertime.documentation-index.l1
-revision: 1
+revision: 2
 status: draft
 language: uk
 canonical: false
@@ -14,6 +14,10 @@ translation_of: ../en/INDEX.md
 ## Правила першого рівня
 
 - [Політика документації першого рівня](DOCUMENTATION_POLICY_L1.md)
+
+## Пропозиції дизайну
+
+- [Рух матерії та локації Землі](design/MATTER_FLOW_AND_LOCATIONS.md) (чернетка)
 
 Англійські документи є канонічними для використання Агентом. Кожен документ
 першого рівня потребує синхронізованого українського дубля за відповідним шляхом
