@@ -1571,3 +1571,45 @@ pre {
 .qualification-step-editor { display: grid; gap: 6px; padding: 8px; border-left: 2px solid #f0bd63; background: #102119; }
 .qualification-step-editor > small { color: #efbf78; }
 .qualification-identity { padding: 9px; border: 1px solid #29483f; }
+
+/* World pilot playback (/world) */
+.world-shell { height: 100vh; min-height: 640px; display: grid; grid-template-rows: 58px 1fr 54px; color: #e7f0ec; background: #07110e; }
+.world-message { display: grid; place-items: center; color: var(--muted); }
+.world-top { display: grid; grid-template-columns: 140px 1fr auto; gap: 18px; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--line); background: #091512; }
+.world-top small { display: block; color: var(--muted); font-size: 10px; letter-spacing: 0.12em; }
+.world-top b { font-size: 16px; }
+.world-back { color: var(--signal); text-decoration: none; font-size: 13px; }
+.world-clock { font-variant-numeric: tabular-nums; color: var(--cyan); font-size: 15px; }
+.world-body { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+.world-map { position: relative; min-height: 0; }
+.world-side { overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); padding: 6px 16px 16px; font-size: 13px; }
+.world-side section { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.world-side h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.world-side p { margin: 0; line-height: 1.5; }
+.world-muted { color: var(--muted); font-size: 12px; }
+.world-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.world-table th { text-align: right; color: var(--muted); font-weight: 500; font-size: 11px; }
+.world-table td { padding: 3px 0; }
+.world-table td + td { text-align: right; padding-left: 10px; }
+.world-total td { border-top: 1px solid var(--line); color: var(--signal); font-weight: 600; padding-top: 6px; }
+.world-products { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.world-products span { display: grid; gap: 2px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; }
+.world-products small { color: var(--muted); font-size: 11px; }
+.world-products b { font-variant-numeric: tabular-nums; }
+.world-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.world-list li { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 5px 8px; border-left: 3px solid var(--line); background: #0e1d18; }
+.world-list li span { grid-column: 1; color: var(--muted); font-size: 12px; }
+.world-list li em { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-style: normal; font-variant-numeric: tabular-nums; }
+.world-list li[data-status="laden"] { border-left-color: var(--amber); }
+.world-list li[data-status="ballast"] { border-left-color: var(--cyan); }
+.world-notes ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.world-transport { display: grid; grid-template-columns: 120px 1fr 110px; gap: 14px; align-items: center; padding: 0 20px; border-top: 1px solid var(--line); background: #091512; }
+.world-transport button, .world-transport select { height: 32px; color: #e7f0ec; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.world-transport input[type="range"] { width: 100%; accent-color: var(--signal); }
+.world-label { color: #e7f0ec; font-size: 12px; text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; white-space: nowrap; }
+.world-label.asset { color: var(--signal); }
+.world-vessel { display: flex; align-items: center; gap: 4px; pointer-events: none; }
+.world-vessel i { width: 11px; height: 11px; border-radius: 50%; background: var(--muted); border: 2px solid #07110e; box-shadow: 0 0 0 1px currentColor; }
+.world-vessel span { font-size: 10px; color: #e7f0ec; text-shadow: 0 0 3px #000; }
+.world-vessel[data-status="laden"] i { background: var(--amber); }
+.world-vessel[data-status="ballast"] i { background: var(--cyan); }

@@ -103,9 +103,9 @@ def record_event(
         raise LedgerError("occurred_at must be timezone-aware")
     if not is_subtype(db, event_type_id, EVENT_TYPE):
         raise LedgerError(f"{event_type_id} is not an event type")
+    # Events without postings are allowed: a departure or arrival moves an asset
+    # (a located_in relation caused by the event) without changing any quantity.
     items = list(postings)
-    if not items:
-        raise LedgerError("an event needs at least one posting")
     missing = {p.entity_id for p in items} - set(
         db.scalars(select(Entity.id).where(Entity.id.in_({p.entity_id for p in items})))
     )

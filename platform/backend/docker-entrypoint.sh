@@ -11,6 +11,8 @@ if [ "$mode" = "api" ]; then
   python -m app.seed --participants
   # World core type lattice and predicate vocabulary: additive and idempotent.
   python -m app.seed --world-core
+  # Pilot run (Saudi Arabia to India crude, 2023): generated once, kept on restart.
+  python -m app.seed --world-pilot
   exec uvicorn app.main:app --host 0.0.0.0 --port 8000
 fi
 

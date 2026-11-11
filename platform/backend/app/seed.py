@@ -5,6 +5,7 @@ from app.models import Entity, LabProject, ProcessModel, Relation, Route, Scenar
 from app.lab_seed import seed_model_lab
 from app.participant_catalog import seed_participant_process_pilots
 from app.world_core import seed_world_core
+from app.world_pilot import generate_pilot_events, seed_pilot_world
 
 ENTITIES = [
     ("ua", "state", "institutional", "Ukraine", "UA"),
@@ -191,10 +192,20 @@ def seed_world_core_vocabulary() -> None:
         db.commit()
 
 
+def seed_world_pilot(*, force: bool = False) -> None:
+    """Seed the Saudi Arabia to India pilot and generate its events once (or again with force)."""
+    with SessionLocal() as db:
+        seed_pilot_world(db)
+        generate_pilot_events(db, force=force)
+        db.commit()
+
+
 if __name__ == "__main__":
     import sys
 
-    if "--world-core" in sys.argv:
+    if "--world-pilot" in sys.argv:
+        seed_world_pilot(force="--force" in sys.argv)
+    elif "--world-core" in sys.argv:
         seed_world_core_vocabulary()
     elif "--participants" in sys.argv:
         seed_participants()
