@@ -5,8 +5,14 @@ import "./styles.css";
 
 // The world player pulls in MapLibre; load it only on /world.
 const WorldPlayback = lazy(() => import("./WorldPlayback"));
+const WorldEntities = lazy(() => import("./WorldEntities"));
 
-const page = window.location.pathname.startsWith("/world") ? (
+const path = window.location.pathname;
+const page = path.startsWith("/world/entities") ? (
+  <Suspense fallback={null}>
+    <WorldEntities />
+  </Suspense>
+) : path.startsWith("/world") ? (
   <Suspense fallback={null}>
     <WorldPlayback />
   </Suspense>

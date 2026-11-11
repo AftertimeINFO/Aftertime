@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { request } from "./api";
-import { balancesAt, buildTimeline, lastIndexAt, vesselStates, type LedgerEvent, type LngLat, type PilotPayload } from "./worldModel";
+import VersionBadge from "./VersionBadge";
+import EntityCard from "./EntityCard";
+import { balancesAt, buildTimeline, lastIndexAt, vesselStates, type LedgerEvent, type LngLat, type PilotObject, type PilotPayload } from "./worldModel";
 
 const DAY = 86_400_000;
 const SPEEDS = [0.5, 1, 3, 7, 14]; // simulated days per real second
@@ -44,6 +46,9 @@ const BASEMAP: maplibregl.StyleSpecification = {
   ],
 };
 
+const KIND_LABELS: Record<string, string> = { place: "Місця", asset: "Об'єкти та судна", portion: "Порції речовини", actor: "Учасники", element: "Хімічні елементи" };
+type Tab = "overview" | "objects" | "card";
+
 const mbbl = (kg: number, kgPerBbl: number) => kg / kgPerBbl / 1e6;
 const fmt = (value: number, digits = 1) => value.toLocaleString("uk-UA", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const date = (t: number) => new Date(t).toLocaleString("uk-UA", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -54,6 +59,14 @@ export default function WorldPlayback() {
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(3);
+  const initial = new URLSearchParams(window.location.search);
+  const [selected, setSelected] = useState<string | null>(initial.get("entity"));
+  const [tab, setTab] = useState<Tab>(initial.get("entity") ? "card" : "overview");
+  const [filter, setFilter] = useState("");
+  const select = (id: string) => { setSelected(id); setTab("card"); };
+  const selectRef = useRef(select);
+  selectRef.current = select;
+  const labelMarkers = useRef(new Map<string, HTMLElement>());
   const mapNode = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const vesselMarkers = useRef(new Map<string, maplibregl.Marker>());
@@ -62,7 +75,8 @@ export default function WorldPlayback() {
     request<PilotPayload>("/world/pilot", undefined, 60_000)
       .then((payload) => {
         setData(payload);
-        setT(Date.parse(payload.events[0]?.t ?? `${payload.parameters.year}-01-01T00:00:00Z`));
+        const requested = Date.parse(initial.get("t") || "");
+        setT(Number.isFinite(requested) ? requested : Date.parse(payload.events[0]?.t ?? `${payload.parameters.year}-01-01T00:00:00Z`));
       })
       .catch((reason) => setError(String(reason?.message || reason)));
   }, []);
@@ -97,6 +111,11 @@ export default function WorldPlayback() {
       instance.addLayer({ id: "deposit-line", type: "line", source: "pilot", filter: ["==", ["get", "type"], "type:deposit"], paint: { "line-color": "#f0bd63", "line-width": 1.2 } });
       instance.addLayer({ id: "lane", type: "line", source: "pilot", filter: ["==", ["get", "type"], "type:sea-lane"], paint: { "line-color": "#64d8cb", "line-width": 1.6, "line-dasharray": [2, 2], "line-opacity": 0.8 } });
       instance.addLayer({ id: "facilities", type: "circle", source: "pilot", filter: ["==", ["get", "kind"], "asset"], paint: { "circle-radius": 6, "circle-color": "#b7f34a", "circle-stroke-color": "#07110e", "circle-stroke-width": 2 } });
+      for (const layer of ["facilities", "deposit", "lane"]) {
+        instance.on("click", layer, (event) => { const id = event.features?.[0]?.properties?.id; if (id) selectRef.current(String(id)); });
+        instance.on("mouseenter", layer, () => { instance.getCanvas().style.cursor = "pointer"; });
+        instance.on("mouseleave", layer, () => { instance.getCanvas().style.cursor = ""; });
+      }
       for (const place of data.places) {
         const entry = FACILITY_LABELS[place.id];
         if (!entry || !place.geometry) continue;
@@ -105,6 +124,8 @@ export default function WorldPlayback() {
         const element = document.createElement("div");
         element.className = `world-label ${place.kind === "asset" ? "asset" : ""}`;
         element.textContent = label;
+        element.addEventListener("click", () => selectRef.current(place.id));
+        labelMarkers.current.set(place.id, element);
         new maplibregl.Marker({ element, anchor: "left", offset }).setLngLat(position).addTo(instance);
       }
     });
@@ -145,13 +166,26 @@ export default function WorldPlayback() {
         const element = document.createElement("div");
         element.className = "world-vessel";
         element.innerHTML = `<i></i><span>${(data.names[state.vessel] || state.vessel).replace("Pilot ", "")}</span>`;
+        const vesselId = state.vessel;
+        element.addEventListener("click", () => selectRef.current(vesselId));
         marker = new maplibregl.Marker({ element, anchor: "center" }).setLngLat(state.position).addTo(instance);
         vesselMarkers.current.set(state.vessel, marker);
       }
       marker.setLngLat(state.position);
       marker.getElement().dataset.status = state.status;
+      marker.getElement().classList.toggle("selected", state.vessel === selected);
     }
-  }, [vessels, data]);
+    for (const [id, element] of labelMarkers.current) element.classList.toggle("selected", id === selected);
+  }, [vessels, data, selected]);
+
+  // Keep the selection in the address so a card can be shared or reopened.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (selected) params.set("entity", selected); else params.delete("entity");
+    params.delete("t");
+    const search = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+  }, [selected]);
 
   if (error) return <div className="world-shell world-message">Не вдалося завантажити пілот: {error}</div>;
   if (!data || !model) return <div className="world-shell world-message">Завантаження пілоту…</div>;
@@ -183,11 +217,44 @@ export default function WorldPlayback() {
           <small>ПІЛОТ · БАЛАНС МАТЕРІЇ · НАБЛИЖЕННЯ</small>
           <b>Arab Light: Гавар → Джамнагар, {data.parameters.year}</b>
         </div>
-        <div className="world-clock">{date(t)} UTC</div>
+        <div className="world-top-right">
+          <a href="/world/entities" className="world-back">Усі сутності</a>
+          <VersionBadge />
+          <div className="world-clock">{date(t)} UTC</div>
+        </div>
       </header>
       <div className="world-body">
         <div className="world-map" ref={mapNode} />
         <aside className="world-side">
+          <div className="world-tabs">
+            <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>Огляд</button>
+            <button className={tab === "objects" ? "active" : ""} onClick={() => setTab("objects")}>Об'єкти · {data.objects.length}</button>
+            <button className={tab === "card" ? "active" : ""} disabled={!selected} onClick={() => setTab("card")}>Картка</button>
+          </div>
+          {tab === "card" && selected && <EntityCard id={selected} at={t} onOpen={select} />}
+          {tab === "objects" && (
+            <div className="world-objects">
+              <input type="search" placeholder="Фільтр об'єктів" value={filter} onChange={(e) => setFilter(e.target.value)} />
+              {Object.entries(
+                data.objects
+                  .filter((o) => !filter || `${o.name} ${o.id}`.toLowerCase().includes(filter.toLowerCase()))
+                  .reduce<Record<string, PilotObject[]>>((groups, o) => ({ ...groups, [o.kind]: [...(groups[o.kind] || []), o] }), {}),
+              ).map(([kind, objects]) => (
+                <section key={kind}>
+                  <h3>{KIND_LABELS[kind] || kind} · {objects.length}</h3>
+                  <ul className="world-list">
+                    {objects.map((o) => (
+                      <li key={o.id} className={`clickable ${o.id === selected ? "active" : ""}`} onClick={() => select(o.id)}>
+                        <b>{o.name}</b>
+                        <span>{o.type ? o.type.replace("type:", "") : o.id}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+          {tab === "overview" && <>
           <section>
             <h3>Запаси родовища</h3>
             {estimate ? (
@@ -219,7 +286,7 @@ export default function WorldPlayback() {
             <h3>Танкери</h3>
             <ul className="world-list">
               {vessels.map((v) => (
-                <li key={v.vessel} data-status={v.status}>
+                <li key={v.vessel} data-status={v.status} className="clickable" onClick={() => select(v.vessel)}>
                   <b>{data.names[v.vessel] || v.vessel}</b>
                   <span>{STATUS_LABELS[v.status]}{v.status === "laden" || v.status === "ballast" ? ` · ${Math.round(v.progress * 100)}%` : ""}</span>
                   <em>{fmt(mbbl(at(v.vessel), kgPerBbl))} млн бар.</em>
@@ -246,6 +313,7 @@ export default function WorldPlayback() {
             <h3>Припущення</h3>
             <ul>{(data.parameters.notes as string[]).map((note) => <li key={note}>{note}</li>)}</ul>
           </section>
+          </>}
         </aside>
       </div>
       <footer className="world-transport">

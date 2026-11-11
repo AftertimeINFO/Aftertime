@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app import __version__
 from app.api.routes import router
 from app.api.model_lab import router as model_lab_router
 from app.api.world import router as world_router
@@ -10,7 +11,7 @@ from app.db import engine
 
 app = FastAPI(
     title="Aftertime Platform API",
-    version="0.4.0-rc.6",
+    version=__version__,
     description="Physical world model, simulation and planning API",
 )
 app.add_middleware(
@@ -29,4 +30,9 @@ app.include_router(world_router)
 def health() -> dict:
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
-    return {"status": "ok", "service": "aftertime-api", "environment": settings.environment}
+    return {
+        "status": "ok",
+        "service": "aftertime-api",
+        "version": __version__,
+        "environment": settings.environment,
+    }

@@ -31,3 +31,14 @@ describe("world playback", () => {
     expect(at("2023-01-07T00:00:00Z").position).toEqual([0, 0]);
   });
 });
+
+describe("formatting", () => {
+  it("formats masses and scientific numbers", async () => {
+    const { formatMass, scientific } = await import("./worldModel");
+    expect(formatMass(0)).toBe("0");
+    expect(formatMass(500)).toBe("500 кг");
+    expect(formatMass(2.728e8)).toBe("273 тис. т");
+    expect(formatMass(-6.58e12)).toBe("−6,58 млрд т");
+    expect(scientific(1.16e34)).toEqual(["1,16", 34]);
+  });
+});

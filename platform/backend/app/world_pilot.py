@@ -52,14 +52,55 @@ PARAMETERS = {
         " several Indian ports and refineries.",
         "Vessels are synthetic. Sea lane and facility coordinates are schematic.",
         "Refinery yields are assumed mass shares that sum to one.",
+        "Element compositions are typical values; the composition of other refinery outputs"
+        " is the residual that closes the element balance of refining.",
     ],
 }
+
+# Chemical elements: (symbol, name, molar mass g/mol).
+ELEMENTS = [
+    ("C", "Carbon", 12.011),
+    ("H", "Hydrogen", 1.008),
+    ("S", "Sulfur", 32.06),
+    ("N", "Nitrogen", 14.007),
+    ("O", "Oxygen", 15.999),
+]
+
+# Typical element mass fractions (kg/kg). Other refinery outputs are computed as the residual.
+COMPOSITION: dict[str, dict[str, float]] = {
+    "type:arab-light": {"C": 0.8465, "H": 0.1295, "S": 0.0195, "N": 0.0015, "O": 0.0030},
+    "type:gasoline": {"C": 0.865, "H": 0.135},
+    "type:diesel": {"C": 0.862, "H": 0.13799, "S": 0.00001},
+    "type:jet-fuel": {"C": 0.858, "H": 0.142},
+    "type:fuel-oil": {"C": 0.870, "H": 0.113, "S": 0.005, "N": 0.003, "O": 0.009},
+}
+
+
+def element_id(symbol: str) -> str:
+    return f"element:{symbol.lower()}"
+
+
+def compositions() -> dict[str, dict[str, float]]:
+    """Material compositions, with the residual output closing the refining element balance."""
+    yields = PARAMETERS["refinery_yields"]
+    other = "type:other-refinery-output"
+    residual = {}
+    for symbol, _, _ in ELEMENTS:
+        known = sum(
+            share * COMPOSITION[product].get(symbol, 0.0)
+            for product, share in yields.items()
+            if product != other
+        )
+        residual[symbol] = (COMPOSITION["type:arab-light"].get(symbol, 0.0) - known) / yields[other]
+    return {**COMPOSITION, other: {s: f for s, f in residual.items() if f > 0}}
+
 
 # Pilot-specific types extend the core lattice: (id, name, parent).
 PILOT_TYPES = [
     ("type:planet", "Planet", "type:place"),
     ("type:sea-lane", "Sea lane", "type:place"),
     ("type:other-refinery-output", "Other refinery outputs and losses", "type:material"),
+    ("type:chemical-element", "Chemical element", "type:substance"),
 ]
 
 # (id, name, type, part_of, located_in, description)
@@ -237,6 +278,7 @@ def _upsert(
     *,
     level: str = "object",
     description: str | None = None,
+    symbol: str | None = None,
     attributes: dict | None = None,
 ) -> None:
     entity = db.get(Entity, entity_id)
@@ -248,12 +290,14 @@ def _upsert(
                 kind=kind,
                 level=level,
                 name=name,
+                symbol=symbol,
                 description=description,
                 attributes=attributes,
             )
         )
         return
     entity.kind, entity.level, entity.name, entity.description = kind, level, name, description
+    entity.symbol = symbol
     entity.attributes = {**(entity.attributes or {}), **attributes}
 
 
@@ -264,9 +308,11 @@ def _link(
     object_id: str,
     *,
     coefficient: float | None = None,
+    unit: str | None = None,
 ) -> None:
     relation_id = _relation_id(subject_id, predicate, object_id)
-    if db.get(Relation, relation_id) is None:
+    relation = db.get(Relation, relation_id)
+    if relation is None:
         db.add(
             Relation(
                 id=relation_id,
@@ -274,10 +320,13 @@ def _link(
                 predicate=predicate,
                 object_id=object_id,
                 coefficient=coefficient,
+                unit=unit,
                 confidence=1,
                 source_id=SOURCE_ID,
             )
         )
+        return
+    relation.coefficient, relation.unit = coefficient, unit
 
 
 def holders() -> list[tuple[str, list[str]]]:
@@ -311,6 +360,16 @@ def seed_pilot_world(db: Session) -> None:
         _upsert(db, entity_id, "asset", name)
     for entity_id, name, _ in ACTORS:
         _upsert(db, entity_id, "actor", name, level="institutional")
+    for symbol, name, molar_mass in ELEMENTS:
+        _upsert(
+            db,
+            element_id(symbol),
+            "element",
+            name,
+            level="atomic",
+            symbol=symbol,
+            attributes={"molar_mass_g_per_mol": molar_mass},
+        )
     for vessel_id, name in VESSELS:
         _upsert(
             db,
@@ -351,6 +410,22 @@ def seed_pilot_world(db: Session) -> None:
         _link(db, entity_id, "instance_of", type_id)
     for vessel_id, _ in VESSELS:
         _link(db, vessel_id, "instance_of", "type:vessel")
+    for symbol, _, _ in ELEMENTS:
+        _link(db, element_id(symbol), "instance_of", "type:chemical-element")
+        # Crosswalk to atom entities of the earlier bootstrap seed (ids "n", "h"), if present.
+        legacy = db.get(Entity, symbol.lower())
+        if legacy is not None and legacy.kind == "atom":
+            _link(db, element_id(symbol), "same_as", legacy.id)
+    for material_id, fractions in compositions().items():
+        for symbol, fraction in fractions.items():
+            _link(
+                db,
+                material_id,
+                "composed_of",
+                element_id(symbol),
+                coefficient=round(fraction, 8),
+                unit="kg/kg",
+            )
     for holder_id, materials in holders():
         for material_id in materials:
             _link(db, portion_id(holder_id, material_id), "instance_of", material_id)
@@ -448,6 +523,13 @@ def generate_pilot_events(db: Session, *, force: bool = False) -> int:
     if existing:
         run_events = select(WorldEvent.id).where(WorldEvent.run_id == RUN_ID)
         db.execute(delete(Relation).where(Relation.cause_event_id.in_(run_events)))
+        db.execute(
+            delete(Relation).where(
+                Relation.source_id == SOURCE_ID,
+                Relation.predicate == "located_in",
+                Relation.valid_from.is_not(None),
+            )
+        )
         db.execute(delete(WorldEvent).where(WorldEvent.run_id == RUN_ID))
 
     p = PARAMETERS
@@ -600,8 +682,6 @@ def generate_pilot_events(db: Session, *, force: bool = False) -> int:
     for vessel in fleet:
         moves = vessel.moves
         for (at, place_id, event_id), following in zip(moves, [*moves[1:], None], strict=True):
-            if not event_id:
-                continue
             db.add(
                 Relation(
                     subject_id=vessel.id,
@@ -611,7 +691,7 @@ def generate_pilot_events(db: Session, *, force: bool = False) -> int:
                     source_id=SOURCE_ID,
                     valid_from=at,
                     valid_to=following[0] if following else None,
-                    cause_event_id=event_id,
+                    cause_event_id=event_id or None,
                 )
             )
     db.flush()

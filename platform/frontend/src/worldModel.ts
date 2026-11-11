@@ -4,8 +4,10 @@ export type LedgerEvent = { id: string; t: string; type: string; provenance: str
 export type Voyage = { id: string; vessel: string; route: string; direction: "laden" | "ballast"; cargo_kg: number; depart: string; arrive: string };
 export type Place = { id: string; name: string; kind: string; type: string | null; geometry: any; z_min_m: number | null; z_max_m: number | null };
 export type Portion = { id: string; holder: string; material: string };
+export type PilotObject = { id: string; name: string; kind: string; type: string | null };
 export type PilotPayload = {
   run_id: string;
+  objects: PilotObject[];
   source: { id: string; name: string; license: string };
   parameters: Record<string, any>;
   places: Place[];
@@ -104,4 +106,51 @@ export function vesselStates(voyages: Voyage[], routes: Record<string, LngLat[]>
     states.push(state);
   }
   return states.sort((a, b) => a.vessel.localeCompare(b.vessel));
+}
+
+// Entity browser and entity card (GET /world/entities, /world/entities/{id}).
+export type EntityListItem = { id: string; name: string; kind: string; level: string; symbol: string | null; type: string | null };
+export type EntityList = { total: number; kinds: Record<string, number>; items: EntityListItem[] };
+export type RelationRow = { predicate: string; entity_id: string; name: string; kind: string; coefficient: number | null; unit: string | null; valid_from: string | null; valid_to: string | null; cause_event_id: string | null };
+export type OperationPosting = { entity_id: string; property: string; delta: number; unit: string; own: boolean };
+export type Operation = { id: string; occurred_at: string; type: string; type_name: string; provenance: string; run_id: string | null; attributes: Record<string, any>; postings: OperationPosting[] };
+export type Operations = { total: number; items: Operation[] };
+export type Contents = {
+  at: string;
+  total_kg: number;
+  portions: { id: string; name: string; kg: number; estimated: boolean; material: string | null; holder: string | null }[];
+  materials: { id: string; name: string; kg: number }[];
+  elements: { id: string; name: string; symbol: string | null; kg: number; mol: number | null; atoms: number | null }[];
+  unresolved_kg: number;
+};
+export type EntityCardData = {
+  entity: { id: string; name: string; kind: string; level: string; symbol: string | null; description: string | null; jurisdiction: string | null; attributes: Record<string, any> };
+  at: string | null;
+  outgoing: RelationRow[];
+  incoming: RelationRow[];
+  extents: { geometry: any; z_min_m: number | null; z_max_m: number | null; z_surface_ref: string | null }[];
+  observations: { property: string; value: number; unit: string; low: number | null; high: number | null; valid_time: string; epistemic_status: string; evidence: Record<string, any>; source_id: string }[];
+  contents: Contents;
+  operations: Operations;
+  runs: string[];
+};
+
+/** Human mass: kg → кг / т / тис. т / млн т / млрд т. */
+export function formatMass(kg: number): string {
+  const sign = kg < 0 ? "−" : "", t = Math.abs(kg) / 1000;
+  const num = (v: number) => v.toLocaleString("uk-UA", { maximumFractionDigits: v >= 100 ? 0 : v >= 10 ? 1 : 2 });
+  if (t === 0) return "0";
+  if (t < 1) return `${sign}${num(Math.abs(kg))} кг`;
+  if (t < 1e3) return `${sign}${num(t)} т`;
+  if (t < 1e6) return `${sign}${num(t / 1e3)} тис. т`;
+  if (t < 1e9) return `${sign}${num(t / 1e6)} млн т`;
+  return `${sign}${num(t / 1e9)} млрд т`;
+}
+
+/** Mantissa and exponent for scientific display, e.g. 1.16e34 → ["1,16", 34]. */
+export function scientific(value: number): [string, number] {
+  if (!value) return ["0", 0];
+  const exponent = Math.floor(Math.log10(Math.abs(value)));
+  const mantissa = value / 10 ** exponent;
+  return [mantissa.toLocaleString("uk-UA", { maximumFractionDigits: 2 }), exponent];
 }
