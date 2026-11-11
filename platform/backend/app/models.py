@@ -2,8 +2,22 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import UserDefinedType
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -47,6 +61,9 @@ class Relation(Base):
     source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"))
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cause_event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("events.id", ondelete="SET NULL"), index=True
+    )
     __table_args__ = (
         Index("ix_relations_subject_predicate", "subject_id", "predicate"),
         Index("ix_relations_object", "object_id"),
@@ -82,6 +99,86 @@ class Observation(Base):
     uncertainty_low: Mapped[float | None] = mapped_column(Float)
     uncertainty_high: Mapped[float | None] = mapped_column(Float)
     evidence: Mapped[dict] = mapped_column(JSONB, default=dict)
+    cause_event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("events.id", ondelete="SET NULL"), index=True
+    )
+
+
+class Geometry(UserDefinedType):
+    """PostGIS geometry (SRID 4326) exchanged with Python as a GeoJSON string."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw) -> str:
+        return "geometry(Geometry, 4326)"
+
+    def bind_expression(self, bindvalue):
+        return func.ST_SetSRID(func.ST_GeomFromGeoJSON(bindvalue), 4326)
+
+    def column_expression(self, col):
+        return func.ST_AsGeoJSON(col)
+
+
+class EntityExtent(Base):
+    """Spatial aspect of any entity: a 2D footprint plus a vertical band, valid in time."""
+
+    __tablename__ = "entity_extents"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    entity_id: Mapped[str] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"), index=True
+    )
+    geom: Mapped[str | None] = mapped_column(Geometry())
+    z_min_m: Mapped[float | None] = mapped_column(Float)
+    z_max_m: Mapped[float | None] = mapped_column(Float)
+    z_surface_ref: Mapped[str | None] = mapped_column(Text)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"))
+    attributes: Mapped[dict] = mapped_column(JSONB, default=dict)
+    __table_args__ = (
+        CheckConstraint(
+            "z_min_m IS NULL OR z_max_m IS NULL OR z_min_m <= z_max_m",
+            name="ck_entity_extents_z_band",
+        ),
+    )
+
+
+class WorldEvent(Base):
+    """Append-only ledger header. Its postings describe what changed."""
+
+    __tablename__ = "events"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    event_type_id: Mapped[str] = mapped_column(ForeignKey("entities.id"), index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    scenario_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    run_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"))
+    provenance: Mapped[str] = mapped_column(String(20))
+    attributes: Mapped[dict] = mapped_column(JSONB, default=dict)
+    __table_args__ = (
+        CheckConstraint(
+            "provenance IN ('statistic', 'derived', 'assumed')",
+            name="ck_events_provenance",
+        ),
+    )
+
+
+class Posting(Base):
+    """Signed change of one property of one entity, caused by one event."""
+
+    __tablename__ = "postings"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), index=True
+    )
+    entity_id: Mapped[str] = mapped_column(ForeignKey("entities.id", ondelete="CASCADE"))
+    property: Mapped[str] = mapped_column(String(120))
+    delta: Mapped[float] = mapped_column(Float)
+    unit: Mapped[str] = mapped_column(String(80))
+    __table_args__ = (Index("ix_postings_entity_property", "entity_id", "property"),)
 
 
 class ProcessModel(Base):

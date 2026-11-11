@@ -4,6 +4,7 @@ from app.db import SessionLocal
 from app.models import Entity, LabProject, ProcessModel, Relation, Route, Scenario, Source
 from app.lab_seed import seed_model_lab
 from app.participant_catalog import seed_participant_process_pilots
+from app.world_core import seed_world_core
 
 ENTITIES = [
     ("ua", "state", "institutional", "Ukraine", "UA"),
@@ -183,10 +184,19 @@ def seed_participants() -> None:
         db.commit()
 
 
+def seed_world_core_vocabulary() -> None:
+    """Apply the additive, idempotent world core type lattice and predicate vocabulary."""
+    with SessionLocal() as db:
+        seed_world_core(db)
+        db.commit()
+
+
 if __name__ == "__main__":
     import sys
 
-    if "--participants" in sys.argv:
+    if "--world-core" in sys.argv:
+        seed_world_core_vocabulary()
+    elif "--participants" in sys.argv:
         seed_participants()
     else:
         seed(if_empty="--if-empty" in sys.argv)
