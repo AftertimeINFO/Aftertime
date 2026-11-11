@@ -3,7 +3,7 @@ name: aftertime
 services:
   postgres:
     # PostGIS on the same PostgreSQL major version; existing data volumes stay compatible.
-    image: postgis/postgis:17-3.5-alpine
+    image: postgis/postgis:17-3.6-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-aftertime}
       POSTGRES_USER: ${POSTGRES_USER:-aftertime}
