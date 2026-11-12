@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.db import SessionLocal
-from app.services.world_balance import BalanceError, balance
+from app.services.world_balance import BalanceError, balance, balance_series
 from app.services.world_scope import CONTROL_ROOT, scope_roots, scope_tree
 from app.world_pilot import generate_pilot_events, seed_pilot_world
 from app.world_core import seed_world_core
@@ -138,3 +138,36 @@ def test_extraction_is_broken_down_by_direction(db):
     assert labels["Видобуток → Other Ghawar off-take (aggregate)"]["outflow"] > 2 * (
         labels["Видобуток → Abqaiq processing and storage"]["outflow"]
     )
+
+
+def test_series_adds_up_to_the_balance_of_the_period(db):
+    whole = balance(db, "place:ghawar", START, END, "substance")
+    crude = next(row for row in whole["rows"] if row["id"] == "type:arab-light")
+    series = balance_series(db, "place:ghawar", START, END, "substance", "type:arab-light", "month")
+    points = series["points"]
+    assert len(points) == 12 and points[0]["from"].startswith("2023-01-01")
+    assert points[-1]["to"].startswith("2024-01-01")
+    # Each month opens with the closing of the previous one.
+    for before, after in zip(points, points[1:]):
+        assert close(before["values"]["closing"], after["values"]["opening"])
+    for column in ("opening", "outflow", "closing"):
+        assert close(series["totals"][column], crude["values"][column], scale=1e9), column
+    assert set(series["flows"]) == {row["event_type"] for row in crude["breakdown"]}
+
+    # One flow of the breakdown, by quarter.
+    flow = "Видобуток → Other Ghawar off-take (aggregate)"
+    quarters = balance_series(
+        db, "place:ghawar", START, END, "substance", "type:arab-light", "quarter", flow
+    )
+    assert len(quarters["points"]) == 4
+    expected = next(row for row in crude["breakdown"] if row["event_type"] == flow)["outflow"]
+    assert close(quarters["totals"]["outflow"], expected, scale=1e9)
+    assert all(p["values"]["opening"] == 0 for p in quarters["points"])
+
+
+def test_series_refuses_too_many_points(db):
+    with pytest.raises(BalanceError):
+        balance_series(
+            db, "place:earth", datetime(2019, 1, 1, tzinfo=UTC), datetime(2040, 1, 1, tzinfo=UTC),
+            "substance", "type:arab-light", "month",
+        )

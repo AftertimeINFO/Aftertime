@@ -8,6 +8,7 @@ const WorldPlayback = lazy(() => import("./WorldPlayback"));
 const WorldEntities = lazy(() => import("./WorldEntities"));
 const PromotePage = lazy(() => import("./PromotePage"));
 const ComputePage = lazy(() => import("./ComputePage"));
+const ReportPage = lazy(() => import("./ReportPage"));
 
 const loading = <div className="shell-loading">Завантаження…</div>;
 
@@ -15,6 +16,7 @@ const loading = <div className="shell-loading">Завантаження…</div>
 export function TabPage({ kind }: { kind: TabKind }) {
   const page =
     kind === "balance" ? <BalancePage />
+    : kind === "turnover" || kind === "chart" ? <ReportPage kind={kind} />
     : kind === "world" ? <WorldPlayback />
     : kind === "entities" ? <WorldEntities />
     : kind === "lab" ? <App />

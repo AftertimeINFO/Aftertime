@@ -12,7 +12,7 @@ from app import __version__
 from app.db import get_db
 from app.layers import LAYER_POLICY, current_layer
 from app.models import Entity, EntityExtent, Observation, Posting, Relation, Source, WorldEvent
-from app.services.world_balance import BalanceError, balance
+from app.services.world_balance import BalanceError, balance, balance_series
 from app.services.world_compute import ComputeError, check_period, compute, coverage, overview
 from app.services.world_query import FAR_FUTURE, contents, operations, runs_of
 from app.services.world_scope import scope_tree
@@ -364,6 +364,29 @@ def material_balance(
     try:
         check_period(db, _moment(start), _moment(end))
         result = balance(db, scope, _moment(start), _moment(end), level)
+    except BalanceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ComputeError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    result["coverage"] = coverage(db)
+    return result
+
+
+@router.get("/balance/series")
+def material_balance_series(
+    scope: str,
+    row: str,
+    start: datetime = Query(alias="from"),
+    end: datetime = Query(alias="to"),
+    level: str = "substance",
+    step: str = "month",
+    flow: str | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    """One balance row (or one flow of it) by month, quarter or year: turnover statement and chart."""
+    try:
+        check_period(db, _moment(start), _moment(end))
+        result = balance_series(db, scope, _moment(start), _moment(end), level, row, step, flow)
     except BalanceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ComputeError as exc:

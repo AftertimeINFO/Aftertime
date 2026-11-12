@@ -1951,3 +1951,34 @@ pre {
 .entity-balance:hover { color: #07110e; background: var(--layer, var(--signal)); }
 .period-picker .period-year { width: 62px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
 .period-picker input.bad { border-color: var(--red, #e5484d); color: #ffb4b4; }
+
+/* Reports from a balance row: long-press menu, turnover statement, chart */
+.balance-table tbody tr { -webkit-user-select: none; user-select: none; }
+.report-menu { position: fixed; z-index: 300; min-width: 240px; display: grid; gap: 2px; padding: 8px; background: var(--panel); border: 1px solid var(--layer); border-radius: 6px; box-shadow: 0 12px 30px #000c; }
+.report-menu small { padding: 2px 8px 6px; color: var(--muted); font-size: 11px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-menu button { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; color: #e7f0ec; text-align: left; background: transparent; border: 0; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.report-menu button:hover, .report-menu button:focus-visible { background: #15291f; outline: none; }
+.report-menu button span { width: 16px; color: var(--layer); text-align: center; }
+.report-flow { color: var(--muted); font-weight: 500; font-size: 0.8em; }
+.report-step { display: grid; gap: 4px; }
+.report-step small { color: var(--muted); font-size: 10px; letter-spacing: 0.12em; }
+.report-step select { height: 30px; padding: 0 8px; color: #e7f0ec; background: #07110e; border: 1px solid var(--line); border-radius: 4px; color-scheme: dark; }
+.report-switch { height: 32px; padding: 0 14px; color: var(--layer); background: transparent; border: 1px solid var(--layer); border-radius: 4px; cursor: pointer; }
+.report-switch:hover { color: #07110e; background: var(--layer); }
+.report-note { margin: 10px 0 0; }
+.report-charts { display: grid; gap: 18px; }
+.report-chart { padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.report-chart h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #c8d6d0; }
+.report-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 6px; color: #c8d6d0; font-size: 12px; }
+.report-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.report-legend i, .report-tooltip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.report-plot { position: relative; }
+.report-plot svg { display: block; width: 100%; height: auto; }
+.report-axis line { stroke: #16271f; stroke-width: 1; }
+.report-axis line.zero { stroke: #2c4a3d; }
+.report-axis text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.report-crosshair { stroke: #3a5a4c; stroke-width: 1; }
+.report-hover-band { fill: #ffffff08; }
+.report-tooltip { position: absolute; top: 8px; z-index: 2; display: grid; gap: 3px; min-width: 190px; padding: 8px 10px; color: #e7f0ec; background: #07110ef2; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; pointer-events: none; }
+.report-tooltip span { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; }
+.report-tooltip em { font-style: normal; font-variant-numeric: tabular-nums; }

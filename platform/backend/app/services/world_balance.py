@@ -21,6 +21,7 @@ Levels of matter: ``substance`` (materials grouped by the ``subclass_of`` lattic
 ``molecular`` (available only when materials are composed of molecules).
 """
 
+from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -77,9 +78,19 @@ CARRIER = "Переміщення з носієм"
 
 
 def _ledger(
-    db: Session, start: datetime, end: datetime, materials: dict[str, str], index: ScopeIndex
+    db: Session,
+    start: datetime,
+    end: datetime,
+    materials: dict[str, str],
+    index: ScopeIndex,
+    edges: list[datetime] | None = None,
 ) -> tuple[dict, dict, dict]:
-    """Flows per material, breakdown per material and event type, provenance turnover."""
+    """Flows per material, breakdown per material and event type, provenance turnover.
+
+    With ``edges`` (sub-period starts, the first equal to ``start``) flows and breakdown
+    are returned per sub-period: lists indexed like ``edges``.
+    """
+    edges = edges or [start]
     portions = list(materials)
     base = {row["id"]: row["kg"] for row in portion_amounts(db, portions, start)}
     running = defaultdict(float, base)
@@ -124,13 +135,16 @@ def _ledger(
         key=lambda item: (item[0], item[1], item[2] or ""),
     )
 
-    flows: dict[str, dict[str, float]] = defaultdict(_zero)
-    breakdown: dict[str, dict[str, dict[str, float]]] = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(float))
-    )
+    flows_at: list[dict[str, dict[str, float]]] = [defaultdict(_zero) for _ in edges]
+    breakdown_at: list[dict] = [
+        defaultdict(lambda: defaultdict(lambda: defaultdict(float))) for _ in edges
+    ]
     provenance: dict[str, float] = defaultdict(float)
 
     for moment, kind, event_id in timeline:
+        # Sub-period i holds the moments in (edges[i], edges[i + 1]].
+        bucket = max(bisect_left(edges, moment) - 1, 0)
+        flows, breakdown = flows_at[bucket], breakdown_at[bucket]
         if kind == 0:
             for carrier in moved_at[moment]:
                 cargo = (index.descendants(carrier) | {carrier}) & materials.keys()
@@ -185,7 +199,10 @@ def _ledger(
             turnover = sum(delta for _, delta in inside if delta > 0)
             flows[material]["internal"] += turnover
             breakdown[material][(type_name, "", None)]["internal"] += turnover
-    return flows, _label_breakdown(db, breakdown), provenance
+    labelled = [_label_breakdown(db, breakdown) for breakdown in breakdown_at]
+    if len(edges) == 1:
+        return flows_at[0], labelled[0], provenance
+    return flows_at, labelled, provenance
 
 
 def _label_breakdown(db: Session, breakdown: dict) -> dict:
@@ -456,4 +473,116 @@ def balance(db: Session, scope_id: str, start: datetime, end: datetime, level: s
         if turnover
         else {},
         "empty": not per_material,
+    }
+
+
+STEPS = ("month", "quarter", "year")
+MAX_POINTS = 120
+
+
+def _edges(start: datetime, end: datetime, step: str) -> list[datetime]:
+    """Starts of the sub-periods: ``start``, then calendar month, quarter or year starts."""
+    edges = [start]
+    while True:
+        last = edges[-1]
+        if step == "month":
+            year, month = last.year + last.month // 12, last.month % 12 + 1
+        elif step == "quarter":
+            first = (last.month - 1) // 3 * 3 + 1 + 3
+            year, month = last.year + (first - 1) // 12, (first - 1) % 12 + 1
+        else:
+            year, month = last.year + 1, 1
+        nxt = datetime(year, month, 1, tzinfo=start.tzinfo)
+        if nxt >= end:
+            return edges
+        edges.append(nxt)
+        if len(edges) > MAX_POINTS:
+            raise BalanceError(
+                f"Забагато точок: не більше {MAX_POINTS}; оберіть більший крок або коротший період"
+            )
+
+
+def balance_series(
+    db: Session,
+    scope_id: str,
+    start: datetime,
+    end: datetime,
+    level: str,
+    row_id: str,
+    step: str,
+    flow: str | None = None,
+) -> dict:
+    """One balance row (or one flow of its breakdown) per month, quarter or year."""
+    if step not in STEPS:
+        raise BalanceError(f"Невідомий крок {step!r}")
+    if level not in LEVELS:
+        raise BalanceError(f"Невідомий рівень матерії {level!r}")
+    if end <= start:
+        raise BalanceError("Кінець періоду має бути пізніше за початок")
+    try:
+        roots = scope_roots(db, scope_id)
+    except LookupError as exc:
+        raise BalanceError(f"Невідомий scope {scope_id!r}") from exc
+
+    edges = _edges(start, end, step)
+    bounds = [*edges, end]
+    index = ScopeIndex(db, roots)
+    materials = _portion_materials(db)
+    stocks = [_stock(db, materials, index, moment) for moment in bounds]
+    flows_at, breakdown_at, _ = _ledger(db, start, end, materials, index, edges)
+    if len(edges) == 1:
+        flows_at, breakdown_at = [flows_at], [breakdown_at]
+
+    points = []
+    name = None
+    flows_seen: set[str] = set()
+    for i, (lo, hi) in enumerate(zip(bounds, bounds[1:], strict=False)):
+        per_material: dict[str, dict[str, float]] = {}
+        flows = flows_at[i]
+        for material in set(stocks[i]) | set(stocks[i + 1]) | set(flows):
+            values = dict(flows.get(material, _zero()))
+            values["opening"] = stocks[i].get(material, 0.0)
+            values["closing"] = stocks[i + 1].get(material, 0.0)
+            per_material[material] = _with_residual(values)
+        if level == "element":
+            rows, _ = _element_rows(db, per_material)
+        else:
+            rows = _substance_rows(db, per_material, breakdown_at[i])
+        row = next((r for r in rows if r["id"] == row_id), None)
+        values = dict.fromkeys(COLUMNS, 0.0)
+        if row is not None:
+            name = row["name"]
+            for item in row.get("breakdown", []):
+                flows_seen.add(item["event_type"])
+            if flow is None:
+                values = row["values"]
+            else:
+                item = next((b for b in row.get("breakdown", []) if b["event_type"] == flow), {})
+                values = {column: item.get(column, 0.0) for column in COLUMNS}
+        points.append({"from": lo.isoformat(), "to": hi.isoformat(), "values": values})
+
+    if name is None:
+        names = _names(db, {row_id.split("#")[0]})
+        name = names.get(row_id.split("#")[0], {}).get("name", row_id)
+    totals = _zero()
+    for point in points:
+        for column in ("inflow", "outflow", "transform", "carrier", "internal"):
+            totals[column] += point["values"].get(column, 0.0)
+    if flow is None and points:
+        totals["opening"] = points[0]["values"].get("opening", 0.0)
+        totals["closing"] = points[-1]["values"].get("closing", 0.0)
+        _with_residual(totals)
+    return {
+        "scope": scope_id,
+        "scope_name": _names(db, {scope_id}).get(scope_id, {}).get("name", scope_id),
+        "row": row_id,
+        "name": name,
+        "flow": flow,
+        "flows": sorted(flows_seen),
+        "level": level,
+        "step": step,
+        "unit": "kg",
+        "period": {"from": start.isoformat(), "to": end.isoformat()},
+        "points": points,
+        "totals": totals,
     }

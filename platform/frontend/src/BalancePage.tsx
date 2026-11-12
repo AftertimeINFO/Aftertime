@@ -4,6 +4,9 @@ import { hrefWithLayer, periodBounds, useAppContext } from "./appContext";
 import { PROVENANCE_LABEL, periodCovered, useCoverage } from "./coverage";
 import { PeriodPicker } from "./PeriodSelect";
 import { ScopeBar } from "./ScopeSelect";
+import { ReportMenu, useLongPressMenu, type ReportTarget } from "./ReportMenu";
+import { reportUrl } from "./report";
+import { openTab, usePaneTab } from "./tabs";
 import {
   COLUMNS,
   LEVELS,
@@ -36,6 +39,18 @@ export default function BalancePage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const covered = useCoverage();
   const coverage = covered.overview?.coverage ?? null;
+  const tab = usePaneTab();
+  // Press and hold a row: turnover statement or chart of that row (or flow) in a new tab.
+  const menu = useLongPressMenu();
+  const openReport = (kind: "turnover" | "chart", target: ReportTarget) =>
+    openTab({
+      kind,
+      scope: context.scope,
+      scopeName: tab?.scopeName,
+      from: context.from,
+      to: context.to,
+      url: reportUrl(kind, target.row, level, target.flow),
+    });
   // Wait for the coverage: the period picker moves an uncovered period inside it first.
   // Without any computation there is nothing to report: the request is not sent.
   const waiting = covered.status === "loading" || (covered.status === "ready" && !periodCovered(context.from, context.to, coverage));
@@ -143,7 +158,7 @@ export default function BalancePage() {
               {coverage.forecast ? ` · прогноз після ${dateLabel(coverage.history_to)}` : ""}
             </a>
           )}
-          <span className="balance-note">Маса, {MASS_UNITS.find((u) => u.id === shownUnit)?.label}. Внутрішні переміщення в межах scope в сальдо не впливають.</span>
+          <span className="balance-note">Маса, {MASS_UNITS.find((u) => u.id === shownUnit)?.label}. Внутрішні переміщення в межах scope в сальдо не впливають. Утримуйте кнопку миші на рядку — оборотна відомість чи графік.</span>
         </div>
       )}
 
@@ -181,7 +196,12 @@ export default function BalancePage() {
             <tbody>
               {rows.map((row) => (
                 <Fragment key={row.id}>
-                  <tr className={`${row.group ? "group" : "leaf"} ${row.breakdown?.length ? "has-detail" : ""}`} onClick={() => toggle(row)}>
+                  <tr
+                    className={`${row.group ? "group" : "leaf"} ${row.breakdown?.length ? "has-detail" : ""}`}
+                    onClick={() => toggle(row)}
+                    title="Утримуйте ліву кнопку миші: оборотна відомість або графік"
+                    {...menu.bind({ row: { id: row.id, name: row.name } })}
+                  >
                     <td className="balance-name" style={{ paddingLeft: 12 + row.depth * 18 }}>
                       {row.group ? <i className="balance-caret">{collapsed.has(row.id) ? "▸" : "▾"}</i> : row.breakdown?.length ? <i className="balance-caret">{expanded === row.id ? "−" : "+"}</i> : <i className="balance-caret" />}
                       {row.symbol && <span className="balance-symbol">{row.symbol}</span>}
@@ -197,7 +217,12 @@ export default function BalancePage() {
                     ))}
                   </tr>
                   {expanded === row.id && row.breakdown?.map((detail) => (
-                    <tr key={`${row.id}:${detail.event_type}`} className="detail">
+                    <tr
+                      key={`${row.id}:${detail.event_type}`}
+                      className="detail"
+                      title="Утримуйте ліву кнопку миші: оборотна відомість або графік цього потоку"
+                      {...menu.bind({ row: { id: row.id, name: row.name }, flow: detail.event_type })}
+                    >
                       <td className="balance-name" style={{ paddingLeft: 40 + row.depth * 18 }}>{detail.event_type}</td>
                       {columns.map((column) => (
                         <td key={column.id} className={`col-${column.id}`}>
@@ -229,6 +254,7 @@ export default function BalancePage() {
           </table>
         </div>
       )}
+      <ReportMenu open={menu.open} close={menu.close} onChoose={openReport} />
     </div>
   );
 }

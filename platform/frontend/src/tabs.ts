@@ -8,7 +8,7 @@ import { createContext, useContext, useSyncExternalStore } from "react";
  * page has one tab that is focused again. The tabs survive reloads (localStorage); the
  * address bar always shows the active tab, so a link to it can be shared.
  */
-export type TabKind = "balance" | "world" | "entities" | "lab" | "compute" | "promote";
+export type TabKind = "balance" | "turnover" | "chart" | "world" | "entities" | "lab" | "compute" | "promote";
 
 export type Tab = {
   id: string;
@@ -26,7 +26,9 @@ export type Tab = {
 
 export type TabsState = { tabs: Tab[]; active: string | null };
 
-export const MULTI: ReadonlySet<TabKind> = new Set(["balance"]);
+export const MULTI: ReadonlySet<TabKind> = new Set(["balance", "turnover", "chart"]);
+/** Pages that report on a scope and keep it (with the period) in the tab. */
+export const SCOPED: ReadonlySet<TabKind> = new Set(["balance", "turnover", "chart"]);
 const STORAGE_KEY = "aftertime.tabs";
 const MAX_TABS = 24;
 
@@ -34,6 +36,8 @@ const MAX_TABS = 24;
 export function kindOfPath(path: string): TabKind | null {
   const clean = path.split("?")[0].replace(/\/+$/, "") || "/";
   if (clean === "/" || clean === "/balance") return "balance";
+  if (clean === "/report/turnover") return "turnover";
+  if (clean === "/report/chart") return "chart";
   if (clean.startsWith("/world/entities")) return "entities";
   if (clean === "/world" || clean.startsWith("/world/")) return "world";
   if (clean.startsWith("/lab")) return "lab";
@@ -44,6 +48,8 @@ export function kindOfPath(path: string): TabKind | null {
 
 export const HOME: Record<TabKind, string> = {
   balance: "/",
+  turnover: "/report/turnover",
+  chart: "/report/chart",
   world: "/world",
   entities: "/world/entities",
   lab: "/lab",
@@ -64,6 +70,12 @@ export function tabTitle(tab: Tab): string {
   switch (tab.kind) {
     case "balance":
       return `Баланс · ${tab.scopeName || tab.scope || "Earth"}`;
+    case "turnover":
+    case "chart": {
+      const query = new URLSearchParams(tab.url.split("?")[1] || "");
+      const subject = [query.get("name") || query.get("row"), query.get("flow")].filter(Boolean).join(" · ");
+      return `${tab.kind === "chart" ? "Графік" : "Обороти"} · ${subject} · ${tab.scopeName || tab.scope || "Earth"}`;
+    }
     case "world":
       return "Світ · програвання";
     case "entities":
@@ -128,8 +140,9 @@ export function restoreFor(state: TabsState, url: string, defaults: Partial<Tab>
   const clean = stripLayer(url);
   const active = state.tabs.find((t) => t.id === state.active);
   const linkedScope = new URLSearchParams(clean.split("?")[1] || "").get("scope");
-  const sameScope = kind !== "balance" || !linkedScope || linkedScope === active?.scope;
-  if (active && active.kind === kind && sameScope) {
+  const sameScope = !SCOPED.has(kind) || !linkedScope || linkedScope === active?.scope;
+  const sameReport = kind === "balance" || !MULTI.has(kind) || (!!active && reportKey(clean) === reportKey(active.url));
+  if (active && active.kind === kind && sameScope && sameReport) {
     return { ...state, tabs: state.tabs.map((t) => (t.id === active.id ? { ...t, url: clean } : t)) };
   }
   const params = new URLSearchParams(clean.split("?")[1] || "");
@@ -137,10 +150,17 @@ export function restoreFor(state: TabsState, url: string, defaults: Partial<Tab>
   return openIn(state, {
     kind,
     url: clean,
-    scope: kind === "balance" ? scope ?? defaults.scope : undefined,
+    scope: SCOPED.has(kind) ? scope ?? defaults.scope : undefined,
     from: params.get("from") || defaults.from,
     to: params.get("to") || defaults.to,
   });
+}
+
+/** What a report shows (page, row, flow, level); scope, period and step may differ. */
+function reportKey(url: string): string {
+  const [path, query = ""] = url.split("?");
+  const params = new URLSearchParams(query);
+  return [path, params.get("row"), params.get("flow"), params.get("level")].join("|");
 }
 
 function definedOnly<T extends object>(value: T): Partial<T> {
@@ -181,13 +201,14 @@ function layerQuery(url: string): string {
 
 /** Address a tab shows in the address bar: a balance carries its scope and period. */
 export function addressOf(tab: Tab): string {
-  if (tab.kind !== "balance") return tab.url;
-  const params = new URLSearchParams(tab.url.split("?")[1] || "");
+  if (!SCOPED.has(tab.kind)) return tab.url;
+  const [path, query = ""] = tab.url.split("?");
+  const params = new URLSearchParams(query);
   if (tab.scope) params.set("scope", tab.scope);
   if (tab.from) params.set("from", tab.from);
   if (tab.to) params.set("to", tab.to);
   const search = params.toString();
-  return `/${search ? `?${search}` : ""}`;
+  return `${path || "/"}${search ? `?${search}` : ""}`;
 }
 
 function commit(next: TabsState): void {
@@ -238,7 +259,7 @@ export function openTab(request: OpenRequest): void {
   // A new tab takes the period of the tab it is opened from.
   const from = state.tabs.find((t) => t.id === state.active);
   const pinned: OpenRequest = { ...request, from: request.from ?? from?.from ?? defaults.from, to: request.to ?? from?.to ?? defaults.to };
-  if (request.kind === "balance") pinned.scope = request.scope ?? defaults.scope;
+  if (SCOPED.has(request.kind)) pinned.scope = request.scope ?? from?.scope ?? defaults.scope;
   commit(openIn(captureActive(state), pinned));
 }
 
@@ -264,7 +285,7 @@ export function openUrl(url: string): boolean {
   const layer = new URLSearchParams(url.split("?")[1] || "").get("layer");
   if (layer && layer !== new URLSearchParams(window.location.search).get("layer")) return false;
   const query = new URLSearchParams(url.split("?")[1] || "");
-  openTab({ kind, url, scope: kind === "balance" ? query.get("scope") || undefined : undefined });
+  openTab({ kind, url, scope: SCOPED.has(kind) ? query.get("scope") || undefined : undefined });
   return true;
 }
 

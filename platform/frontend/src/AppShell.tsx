@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
   { kind: "promote", label: "Випуск моделей", glyph: "⇪" },
 ];
 
-const GLYPH: Record<TabKind, string> = { balance: "Σ", world: "◍", entities: "◍", lab: "⌬", compute: "◷", promote: "⇪" };
+const GLYPH: Record<TabKind, string> = { balance: "Σ", turnover: "≡", chart: "↗", world: "◍", entities: "◍", lab: "⌬", compute: "◷", promote: "⇪" };
 const RAIL_KEY = "aftertime.rail";
 const EARTH = { scope: "place:earth", scopeName: "Earth" };
 
