@@ -2,8 +2,8 @@
 
 from collections.abc import Sequence
 from alembic import op
-from app.db import Base
-from app import models  # noqa: F401
+# Frozen schema: later revisions own every table added after release 0.4.0-rc.6.
+from migrations.schema_0001 import Base
 
 revision: str = "0002_model_lab"
 down_revision: str | None = "0001_initial_platform"

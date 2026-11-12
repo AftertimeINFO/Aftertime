@@ -5,8 +5,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
-from app.db import Base
-from app import models  # noqa: F401
+# Frozen schema: later revisions own every table added after release 0.4.0-rc.6.
+from migrations.schema_0001 import Base
 
 revision: str = "0005_scripted_workflows"
 down_revision: str | None = "0004_scenario_models"

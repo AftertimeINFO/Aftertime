@@ -1,8 +1,8 @@
 """Model Lab recovery pools and work orders."""
 from collections.abc import Sequence
 from alembic import op
-from app.db import Base
-from app import models  # noqa: F401
+# Frozen schema: later revisions own every table added after release 0.4.0-rc.6.
+from migrations.schema_0001 import Base
 revision: str = "0003_lab_recovery"
 down_revision: str | None = "0002_model_lab"
 branch_labels: str | Sequence[str] | None = None
