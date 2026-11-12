@@ -1,6 +1,8 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+// MapLibre 6 runs its worker from a separate module; the bundler must serve that file.
+import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { request } from "./api";
 import { periodBounds, useAppContext } from "./appContext";
 import { PaneContext, replaceTabQuery, tabParams } from "./tabs";
@@ -30,6 +32,8 @@ const FACILITY_LABELS: Record<string, [string, [number, number]]> = {
 };
 
 // Dark basemap from OpenFreeMap vector tiles (OpenMapTiles schema, © OpenStreetMap contributors).
+maplibregl.setWorkerUrl(mapWorkerUrl);
+
 const BASEMAP: maplibregl.StyleSpecification = {
   version: 8,
   sources: { omt: { type: "vector", url: "https://tiles.openfreemap.org/planet" } },
@@ -125,7 +129,7 @@ export default function WorldPlayback() {
       instance.addLayer({ id: "lane", type: "line", source: "pilot", filter: ["==", ["get", "type"], "type:sea-lane"], paint: { "line-color": "#64d8cb", "line-width": 1.6, "line-dasharray": [2, 2], "line-opacity": 0.8 } });
       instance.addLayer({ id: "facilities", type: "circle", source: "pilot", filter: ["==", ["get", "kind"], "asset"], paint: { "circle-radius": 6, "circle-color": "#b7f34a", "circle-stroke-color": "#07110e", "circle-stroke-width": 2 } });
       for (const layer of ["facilities", "deposit", "lane"]) {
-        instance.on("click", layer, (event) => { const id = event.features?.[0]?.properties?.id; if (id) selectRef.current(String(id)); });
+        instance.on("click", layer, (event: maplibregl.MapLayerMouseEvent) => { const id = event.features?.[0]?.properties?.id; if (id) selectRef.current(String(id)); });
         instance.on("mouseenter", layer, () => { instance.getCanvas().style.cursor = "pointer"; });
         instance.on("mouseleave", layer, () => { instance.getCanvas().style.cursor = ""; });
       }
