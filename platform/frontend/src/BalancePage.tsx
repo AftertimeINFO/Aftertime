@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { request } from "./api";
 import { hrefWithLayer, periodBounds, useAppContext } from "./appContext";
 import { PROVENANCE_LABEL, periodCovered, useCoverage } from "./coverage";
+import { ScopeBar } from "./ScopeSelect";
 import {
   COLUMNS,
   LEVELS,
@@ -91,6 +92,7 @@ export default function BalancePage() {
           <h1>
             {dateLabel(context.from)} — {dateLabel(context.to)}
           </h1>
+          <ScopeBar />
         </div>
         <div className="balance-controls">
           <div className="balance-segment" role="radiogroup" aria-label="Рівень матерії">

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { request } from "./api";
 import { hrefWithLayer, quarterPeriod, setContext, useAppContext, yearPeriod, type LayerId } from "./appContext";
-import { firstScope, scopePath, searchScopes, type ScopeNode, type ScopeTree } from "./balance";
 import { clampPeriod, coveredYears, periodCovered, useCoverage } from "./coverage";
 import { TabPage } from "./pages";
-import { HOME, PaneContext, activateTab, closeTab, openTab, openUrl, tabTitle, updateTab, useTabs, type Tab, type TabKind } from "./tabs";
+import { HOME, PaneContext, activateTab, closeTab, openTab, openUrl, tabTitle, useTabs, type Tab, type TabKind } from "./tabs";
 import VersionBadge from "./VersionBadge";
 
 type LayerInfo = { id: LayerId; label: string; description: string; capabilities: string[]; available: boolean };
@@ -113,7 +112,7 @@ export default function AppShell() {
           </span>
         </a>
         <LayerSwitch layers={layers} active={context.layer} />
-        <ScopePicker active={kind === "balance"} tab={activeTab} />
+        <div className="shell-top-spacer" />
         <PeriodPicker active={kind === "balance" || kind === "world"} />
         <div className="shell-top-right">
           <VersionBadge />
@@ -250,116 +249,6 @@ function LayerSwitch({ layers, active }: { layers: LayerInfo[]; active: LayerId 
     </div>
   );
 }
-
-function ScopePicker({ active, tab }: { active: boolean; tab: Tab | null }) {
-  const context = useAppContext();
-  const [tree, setTree] = useState<ScopeTree | null>(null);
-  const [open, setOpen] = useState(false);
-  const [axis, setAxis] = useState<"geo" | "control">("geo");
-  const [query, setQuery] = useState("");
-  const box = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    request<ScopeTree>("/world/scopes").then(setTree).catch(() => setTree({ axes: [] }));
-  }, []);
-  const found = useMemo(() => scopePath(tree, context.scope), [tree, context.scope]);
-  // An object opened from its card may lie outside the scope tree (a vessel): keep it.
-  const outside = !!tab?.scopeName && tab.scope === context.scope;
-  useEffect(() => {
-    // A scope from another layer may not exist here: fall back to the first root.
-    if (tree && !found && !outside) {
-      const fallback = firstScope(tree);
-      if (fallback && fallback !== context.scope) setContext({ scope: fallback });
-    }
-  }, [tree, found, context.scope, outside]);
-  // The tab title follows the scope.
-  const foundName = found?.path[found.path.length - 1]?.name;
-  useEffect(() => {
-    if (active && tab && foundName && tab.scopeName !== foundName && tab.scope === context.scope) updateTab(tab.id, { scopeName: foundName });
-  }, [active, tab, foundName, context.scope]);
-  useEffect(() => {
-    if (found) setAxis(found.axis.id);
-  }, [found]);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => {
-      if (box.current && !box.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
-  const empty = tree !== null && !tree.axes.some((a) => a.roots.length);
-  const currentAxis = tree?.axes.find((a) => a.id === axis);
-  const matches = currentAxis && query.trim() ? searchScopes(currentAxis, query) : null;
-  const choose = (id: string, name?: string) => {
-    setContext({ scope: id, scopeName: name });
-    setOpen(false);
-    setQuery("");
-  };
-
-  return (
-    <div className={`scope-picker ${active ? "" : "inactive"}`} ref={box} title={active ? "" : "Scope застосовується до балансу матерії"}>
-      <small>SCOPE · {found?.axis.name ?? "—"}</small>
-      <button className="scope-current" onClick={() => setOpen(!open)} disabled={empty}>
-        {empty ? (
-          <span className="scope-crumb-muted">У шарі ще немає сутностей</span>
-        ) : found ? (
-          found.path.map((node, index) => (
-            <span key={node.id} className={index === found.path.length - 1 ? "scope-crumb-last" : "scope-crumb"}>
-              {node.name}
-            </span>
-          ))
-        ) : outside ? (
-          <span className="scope-crumb-last">{tab?.scopeName}</span>
-        ) : (
-          <span className="scope-crumb-muted">…</span>
-        )}
-        <i aria-hidden="true">▾</i>
-      </button>
-      {open && tree && (
-        <div className="scope-panel">
-          <div className="scope-axes">
-            {tree.axes.map((a) => (
-              <button key={a.id} className={a.id === axis ? "active" : ""} onClick={() => setAxis(a.id)}>
-                {a.name}
-              </button>
-            ))}
-          </div>
-          <input type="search" autoFocus placeholder="Пошук: країна, регіон, компанія, об'єкт" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <div className="scope-tree">
-            {matches
-              ? matches.map(({ node, path }) => (
-                  <button key={`${path.map((p) => p.id).join("/")}/${node.id}`} className={node.id === context.scope ? "active" : ""} onClick={() => choose(node.id, node.name)}>
-                    <b>{node.name}</b>
-                    <span>{path.map((p) => p.name).join(" › ") || "корінь"}</span>
-                  </button>
-                ))
-              : currentAxis?.roots.map((root) => <ScopeBranch key={root.id} node={root} depth={0} active={context.scope} choose={choose} trail="" />)}
-            {currentAxis && !currentAxis.roots.length && <p className="scope-empty">На цій осі ще немає вузлів.</p>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ScopeBranch({ node, depth, active, choose, trail }: { node: ScopeNode; depth: number; active: string; choose: (id: string, name?: string) => void; trail: string }) {
-  const key = `${trail}/${node.id}`;
-  return (
-    <>
-      <button key={key} className={`scope-node kind-${node.kind} ${node.id === active ? "active" : ""}`} style={{ paddingLeft: 10 + depth * 14 }} onClick={() => choose(node.id, node.name)}>
-        <b>{node.name}</b>
-        <span>{KIND_LABEL[node.kind] ?? node.kind}</span>
-      </button>
-      {node.children.map((child) => (
-        <ScopeBranch key={`${key}/${child.id}`} node={child} depth={depth + 1} active={active} choose={choose} trail={key} />
-      ))}
-    </>
-  );
-}
-
-const KIND_LABEL: Record<string, string> = { place: "місце", asset: "об'єкт", actor: "актор", group: "усі" };
 
 function PeriodPicker({ active }: { active: boolean }) {
   const context = useAppContext();

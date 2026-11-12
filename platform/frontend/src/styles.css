@@ -1710,6 +1710,35 @@ pre {
 .scope-crumb::after { content: "›"; margin-left: 4px; }
 .scope-crumb-last { font-weight: 600; font-size: 13px; }
 .scope-crumb-muted { color: var(--muted); font-size: 12px; }
+.balance-scope { margin-top: 10px; display: grid; gap: 4px; min-width: 0; }
+.balance-scope small { color: var(--muted); font-size: 10px; letter-spacing: 0.12em; }
+.balance-scope-line { display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.balance-scope-path { display: flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.balance-scope-path .scope-crumb-last { font-size: 15px; color: var(--signal); }
+.balance-scope-change { height: 28px; padding: 0 12px; color: var(--layer); background: transparent; border: 1px solid var(--layer); border-radius: 4px; cursor: pointer; font-size: 12px; }
+.balance-scope-change:hover { color: #07110e; background: var(--layer); }
+.balance-scope-change:disabled { opacity: 0.4; cursor: default; }
+.scope-dialog-backdrop { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: #000b; }
+.scope-dialog { width: min(640px, 100%); height: min(720px, 100%); display: flex; flex-direction: column; padding: 14px 16px; color: #e7f0ec; background: var(--panel); border: 1px solid var(--layer); border-radius: 8px; box-shadow: 0 20px 60px #000c; }
+.scope-dialog header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.scope-dialog header small { display: block; color: var(--muted); font-size: 10px; letter-spacing: 0.12em; }
+.scope-dialog header b { font-size: 16px; }
+.scope-dialog-close { width: 30px; height: 30px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; font-size: 18px; }
+.scope-dialog-close:hover { color: #e7f0ec; border-color: var(--layer); }
+.scope-dialog input { height: 32px; padding: 0 10px; margin-bottom: 8px; color: #e7f0ec; background: #0e1d18; border: 1px solid var(--line); border-radius: 4px; }
+.scope-dialog .scope-tree { flex: 1; min-height: 0; align-content: start; border: 1px solid var(--line); border-radius: 4px; }
+.scope-dialog footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+.scope-dialog footer button { height: 30px; padding: 0 14px; color: #e7f0ec; background: transparent; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.scope-row { display: flex; align-items: stretch; border-left: 2px solid transparent; }
+.scope-row:hover { background: #15291f; }
+.scope-row.active { background: #15291f; border-left-color: var(--layer); }
+.scope-tree .scope-row button { border-left: 0; }
+.scope-tree .scope-row button:hover, .scope-tree .scope-row.active button { background: transparent; }
+.scope-row-main { flex: 1; min-width: 0; }
+.scope-tree .scope-row-new { flex: none; justify-content: center; width: 34px; padding: 0; color: var(--muted); opacity: 0; }
+.scope-row:hover .scope-row-new { opacity: 1; }
+.scope-tree .scope-row-new:hover { color: var(--layer); }
+.scope-row.kind-asset b { color: #c8d6d0; }
 .scope-panel { position: absolute; z-index: 50; top: calc(100% + 6px); left: 0; width: 420px; max-height: 70vh; display: flex; flex-direction: column; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 12px 30px #000a; }
 .scope-axes { display: flex; gap: 4px; margin-bottom: 8px; }
 .scope-axes button { flex: 1; height: 28px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
