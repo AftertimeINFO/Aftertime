@@ -13,7 +13,16 @@ export type Coverage = {
   parameters: { horizon?: string; growth_pct?: number; method?: string };
 };
 
-export type YearFlow = { year: number; bbl_per_day: number; provenance: string; reference: string | null };
+export type YearFlow = {
+  year: number;
+  bbl_per_day: number;
+  provenance: string;
+  reference: string | null;
+  /** Whole Ghawar output (the pilot flow is part of it). */
+  ghawar_bbl_per_day?: number;
+  ghawar_provenance?: string;
+  ghawar_reference?: string | null;
+};
 
 export type Computation = {
   id: string;

@@ -241,7 +241,8 @@ export default function WorldPlayback() {
   const recent: LedgerEvent[] = model.sorted.slice(Math.max(0, lastIndexAt(model.timeline.times, t) - 7), lastIndexAt(model.timeline.times, t) + 1).reverse();
   const estimate = data.estimate;
   const rows: [string, number][] = [
-    ["Гавар → видобуто для пілоту", produced],
+    ["Гавар → видобуто, усього", produced],
+    ["Інші напрями (агрегат)", at("place:ghawar-other-offtake")],
     ["Абкайк, сховище", at("asset:abqaiq")],
     ["Рас-Танура, термінал", at("asset:ras-tanura")],
     ["На танкерах", afloat],
@@ -310,7 +311,7 @@ export default function WorldPlayback() {
                 Гавар, оцінка {estimate.evidence.class} ({estimate.evidence.system}) на {new Date(estimate.valid_time).toLocaleDateString("uk-UA")}:{" "}
                 <b>{fmt(mbbl(estimate.value_kg, kgPerBbl) / 1000, 2)} млрд бар.</b>
                 <br />
-                <span className="world-muted">Мінус видобуток пілоту: {fmt(mbbl(estimate.value_kg - produced, kgPerBbl) / 1000, 3)} млрд бар. Видобуток поза пілотом не враховано.</span>
+                <span className="world-muted">Мінус видобуток моделі: {fmt(mbbl(estimate.value_kg - produced, kgPerBbl) / 1000, 3)} млрд бар. (переоцінки запасів не враховано).</span>
               </p>
             ) : <p className="world-muted">Оцінки немає.</p>}
           </section>

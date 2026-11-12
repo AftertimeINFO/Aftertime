@@ -12,6 +12,8 @@ from app.services.world_ledger import balance_of
 from app.world_pilot import (
     CRUDE,
     ELEMENTS,
+    HISTORY,
+    OFFTAKE,
     PARAMETERS,
     RUN_ID,
     VESSELS,
@@ -55,6 +57,15 @@ def _count_cargoes(db):
     )
 
 
+def offtakes(db) -> int:
+    """Monthly off-take events: Ghawar output outside the pilot route."""
+    return db.scalar(
+        select(func.count())
+        .select_from(WorldEvent)
+        .where(WorldEvent.run_id == RUN_ID, WorldEvent.attributes.has_key("month"))
+    )
+
+
 def cargo_kg() -> float:
     return PARAMETERS["cargo_bbl"] * PARAMETERS["kg_per_bbl"]
 
@@ -72,7 +83,11 @@ def test_run_conserves_mass_and_ends_in_products(db):
     assert total == pytest.approx(0.0, abs=1e-3)
 
     produced = cargoes() * cargo_kg()
-    assert balance_of(db, portion_id("place:ghawar", CRUDE), "mass") == pytest.approx(-produced)
+    other = balance_of(db, portion_id(OFFTAKE, CRUDE), "mass")
+    assert other > produced  # Ghawar sends most of its crude elsewhere
+    assert balance_of(db, portion_id("place:ghawar", CRUDE), "mass") == pytest.approx(
+        -(produced + other)
+    )
     for holder in ("asset:abqaiq", "asset:ras-tanura", "asset:sikka", "asset:jamnagar"):
         assert balance_of(db, portion_id(holder, CRUDE), "mass") == pytest.approx(0, abs=1e-3)
     products = sum(
@@ -92,8 +107,11 @@ def test_regeneration_is_idempotent(db):
         select(func.count()).select_from(WorldEvent).where(WorldEvent.run_id == RUN_ID)
     )
     assert after == before
-    # Ten events per cargo; the return legs of the last voyages may end after the run.
-    assert cargoes() * 10 - len(VESSELS) <= after <= cargoes() * 10
+    # Ten events per cargo (the return legs of the last voyages may end after the run),
+    # plus one off-take a month.
+    voyages = after - offtakes(db)
+    assert cargoes() * 10 - len(VESSELS) <= voyages <= cargoes() * 10
+    assert offtakes(db) == 12 * len(HISTORY)
 
 
 def test_history_years_follow_the_published_flows(db):
@@ -107,6 +125,7 @@ def test_history_years_follow_the_published_flows(db):
             .where(
                 WorldEvent.run_id == RUN_ID,
                 WorldEvent.event_type_id == "type:produce",
+                ~WorldEvent.attributes.has_key("month"),
                 WorldEvent.occurred_at >= start,
                 WorldEvent.occurred_at < end,
             )
@@ -119,12 +138,38 @@ def test_history_years_follow_the_published_flows(db):
                 select(WorldEvent.provenance).where(
                     WorldEvent.run_id == RUN_ID,
                     WorldEvent.event_type_id == "type:produce",
+                    ~WorldEvent.attributes.has_key("month"),
                     WorldEvent.occurred_at >= start + timedelta(days=5),
                     WorldEvent.occurred_at < end,
                 )
             )
         )
         assert kinds == {provenance}, year
+
+
+def test_ghawar_produces_its_whole_derived_output(db):
+    from app.world_pilot import GHAWAR_HISTORY
+
+    ghawar = portion_id("place:ghawar", CRUDE)
+    for year, (bbl_per_day, provenance, _) in GHAWAR_HISTORY.items():
+        start, end = datetime(year, 1, 1, tzinfo=UTC), datetime(year + 1, 1, 1, tzinfo=UTC)
+        out = -(balance_of(db, ghawar, "mass", at=end) - balance_of(db, ghawar, "mass", at=start))
+        expected = bbl_per_day * (end - start).days * PARAMETERS["kg_per_bbl"]
+        # Cargo timing shifts at most a few cargoes across the turn of the year.
+        assert out == pytest.approx(expected, abs=5 * cargo_kg()), year
+        kinds = set(
+            db.scalars(
+                select(WorldEvent.provenance).where(
+                    WorldEvent.run_id == RUN_ID,
+                    WorldEvent.attributes.has_key("month"),
+                    WorldEvent.occurred_at >= start,
+                    WorldEvent.occurred_at < end,
+                )
+            )
+        )
+        assert kinds == {provenance}, year
+    # About a third of Saudi output: 2.8-3.4 mb/d.
+    assert all(2.8e6 < bbl < 3.4e6 for bbl, _, _ in GHAWAR_HISTORY.values())
 
 
 def test_vessel_locations_do_not_overlap(db):
@@ -222,7 +267,7 @@ def test_contents_emerge_from_containment(db):
     gujarat = contents(db, "place:gujarat", moment)
     assert gujarat["total_kg"] >= sikka["total_kg"] > 0
 
-    # The deposit holds its estimate minus the pilot's production; elements carry atom counts.
+    # The deposit holds its estimate minus its production; elements carry atom counts.
     end = datetime(2024, 6, 1, tzinfo=UTC)
     ghawar = contents(db, "place:ghawar", end)
     produced = -balance_of(db, portion_id("place:ghawar", CRUDE), "mass", at=end)

@@ -53,6 +53,7 @@ export default function ComputePage() {
   const valid =
     !!limits && horizon >= limits.min_horizon && horizon <= limits.max_horizon && Number.isFinite(growthValue) && Math.abs(growthValue) <= limits.max_growth_pct;
   const peak = useMemo(() => Math.max(1, ...(overview?.flows ?? []).map((f) => f.bbl_per_day)), [overview]);
+  const fieldPeak = useMemo(() => Math.max(1, ...(overview?.flows ?? []).map((f) => f.ghawar_bbl_per_day ?? 0)), [overview]);
 
   const run = async () => {
     setBusy(true);
@@ -146,6 +147,36 @@ export default function ComputePage() {
               </div>
             )}
           </section>
+
+          {overview.flows.some((f) => f.ghawar_bbl_per_day) && (
+            <section className="compute-flows">
+              <h2>Видобуток Ghawar field за роками</h2>
+              <table className="compute-table">
+                <tbody>
+                  {overview.flows.map((flow) => {
+                    const tone = PROVENANCE_TONE[flow.ghawar_provenance ?? ""] ?? "assumed";
+                    return (
+                      <tr key={flow.year} className={coverage && `${flow.year}` > coverage.to.slice(0, 4) ? "uncomputed" : ""}>
+                        <td>{flow.year}</td>
+                        <td className="compute-bar">
+                          <i className={`tone-${tone}`} style={{ width: `${((flow.ghawar_bbl_per_day ?? 0) / fieldPeak) * 100}%` }} />
+                        </td>
+                        <td className="num">{kbd(flow.ghawar_bbl_per_day ?? 0)}</td>
+                        <td>
+                          <span className={`compute-tag tone-${tone}`}>{PROVENANCE_LABEL[flow.ghawar_provenance ?? ""] ?? flow.ghawar_provenance}</span>
+                        </td>
+                        <td className="compute-ref">{flow.ghawar_reference ?? "останній історичний рік × зміна потоку"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="compute-hint">
+                Видобуток родовища = видобуток сирої нафти Саудівської Аравії × частка Ghawar у потужності Aramco (3,8 з 12,0 млн бар./добу).
+                Частина, що не йде в Індію, щомісяця переходить до агрегату «Other Ghawar off-take» (саудівські НПЗ та інші напрями експорту).
+              </p>
+            </section>
+          )}
 
           <section className="compute-flows">
             <h2>Потік сирої нафти Saudi Arabia → India за роками</h2>
