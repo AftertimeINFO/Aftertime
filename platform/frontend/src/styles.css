@@ -1580,7 +1580,12 @@ pre {
 .world-top b { font-size: 16px; }
 .world-back { color: var(--signal); text-decoration: none; font-size: 13px; }
 .world-clock { font-variant-numeric: tabular-nums; color: var(--cyan); font-size: 15px; }
-.world-body { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+.world-body { position: relative; display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+.world-body.side-closed { grid-template-columns: 1fr; }
+.world-side[hidden] { display: none; }
+.world-side-toggle { position: absolute; top: 50%; right: 380px; z-index: 3; width: 18px; height: 56px; margin-top: -28px; padding: 0; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-right: 0; border-radius: 4px 0 0 4px; cursor: pointer; font-size: 13px; }
+.world-side-toggle:hover { color: var(--signal); border-color: var(--signal); }
+.world-body.side-closed .world-side-toggle { right: 0; }
 .world-map { position: relative; min-height: 0; }
 .world-side { overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); padding: 6px 16px 16px; font-size: 13px; }
 .world-side section { padding: 10px 0; border-bottom: 1px solid var(--line); }

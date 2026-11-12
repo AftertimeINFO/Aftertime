@@ -66,6 +66,16 @@ function windowLabel(data: PilotPayload): string {
   return first === last ? first : `${first}–${last}`;
 }
 
+const SIDE_KEY = "aftertime.world.side";
+
+function readSideOpen(): boolean {
+  try {
+    return window.localStorage.getItem(SIDE_KEY) !== "closed";
+  } catch {
+    return true;
+  }
+}
+
 export default function WorldPlayback() {
   const context = useAppContext();
   const [data, setData] = useState<PilotPayload | null>(null);
@@ -78,12 +88,25 @@ export default function WorldPlayback() {
   const [selected, setSelected] = useState<string | null>(initial.get("entity"));
   const [tab, setTab] = useState<Tab>(initial.get("entity") ? "card" : "overview");
   const [filter, setFilter] = useState("");
-  const select = (id: string) => { setSelected(id); setTab("card"); };
+  const [sideOpen, setSideOpen] = useState(readSideOpen);
+  const toggleSide = (open: boolean) => {
+    setSideOpen(open);
+    try {
+      window.localStorage.setItem(SIDE_KEY, open ? "open" : "closed");
+    } catch {
+      // Not persisted when storage is unavailable.
+    }
+  };
+  // Choosing an object shows its card, so the panel opens.
+  const select = (id: string) => { setSelected(id); setTab("card"); setSideOpen(true); };
   const selectRef = useRef(select);
   selectRef.current = select;
   const labelMarkers = useRef(new Map<string, HTMLElement>());
   const mapNode = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  useEffect(() => {
+    map.current?.resize();
+  }, [sideOpen]);
   const vesselMarkers = useRef(new Map<string, maplibregl.Marker>());
 
   useEffect(() => {
@@ -237,9 +260,18 @@ export default function WorldPlayback() {
           <div className="world-clock">{date(t)} UTC</div>
         </div>
       </header>
-      <div className="world-body">
+      <div className={`world-body ${sideOpen ? "" : "side-closed"}`}>
         <div className="world-map" ref={mapNode} />
-        <aside className="world-side">
+        <button
+          className="world-side-toggle"
+          onClick={() => toggleSide(!sideOpen)}
+          title={sideOpen ? "Згорнути панель" : "Розгорнути панель"}
+          aria-label={sideOpen ? "Згорнути панель" : "Розгорнути панель"}
+          aria-expanded={sideOpen}
+        >
+          {sideOpen ? "»" : "«"}
+        </button>
+        <aside className="world-side" hidden={!sideOpen}>
           <div className="world-tabs">
             <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>Огляд</button>
             <button className={tab === "objects" ? "active" : ""} onClick={() => setTab("objects")}>Об'єкти · {data.objects.length}</button>
