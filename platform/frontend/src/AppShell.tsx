@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { request } from "./api";
 import { hrefWithLayer, quarterPeriod, setContext, useAppContext, yearPeriod, type LayerId } from "./appContext";
 import { firstScope, scopePath, searchScopes, type ScopeNode, type ScopeTree } from "./balance";
+import { clampPeriod, coveredYears, periodCovered, useCoverage } from "./coverage";
 import VersionBadge from "./VersionBadge";
 
 type LayerInfo = { id: LayerId; label: string; description: string; capabilities: string[]; available: boolean };
@@ -22,6 +23,8 @@ const NAV: NavItem[] = [
     ],
   },
   { href: "/lab", label: "Моделі", glyph: "⌬", match: (p) => p.startsWith("/lab"), needs: ["lab.edit", "lab.run"] },
+  // Open in every layer: the page explains when a layer cannot compute.
+  { href: "/compute", label: "Розрахунок світу", glyph: "◷", match: (p) => p.startsWith("/compute") },
   // Open in every layer: PROD shows where its models came from.
   { href: "/promote", label: "Випуск моделей", glyph: "⇪", match: (p) => p.startsWith("/promote") },
 ];
@@ -29,7 +32,8 @@ const NAV: NavItem[] = [
 const RAIL_KEY = "aftertime.rail";
 
 /** Common frame of every page: layer, scope and period on top, sections on the left. */
-export default function AppShell({ children, usesScope = false }: { children: ReactNode; usesScope?: boolean }) {
+/** usesScope: the page reads scope and period; usesPeriod: the page reads the period only. */
+export default function AppShell({ children, usesScope = false, usesPeriod = false }: { children: ReactNode; usesScope?: boolean; usesPeriod?: boolean }) {
   const context = useAppContext();
   const [layers, setLayers] = useState<LayerInfo[]>([]);
   const [narrow, setNarrow] = useState(() => {
@@ -68,7 +72,7 @@ export default function AppShell({ children, usesScope = false }: { children: Re
         </a>
         <LayerSwitch layers={layers} active={context.layer} />
         <ScopePicker active={usesScope} />
-        <PeriodPicker active={usesScope} />
+        <PeriodPicker active={usesScope || usesPeriod} />
         <div className="shell-top-right">
           <VersionBadge />
         </div>
@@ -232,27 +236,50 @@ const KIND_LABEL: Record<string, string> = { place: "місце", asset: "об'�
 
 function PeriodPicker({ active }: { active: boolean }) {
   const context = useAppContext();
-  const thisYear = new Date().getUTCFullYear();
-  const years = Array.from({ length: thisYear - 2019 }, (_, i) => thisYear - i);
-  const presets = years.flatMap((year) => [
+  const covered = useCoverage();
+  const coverage = covered.overview?.coverage ?? null;
+  const ready = covered.status === "ready";
+  // A period without a computation is moved inside the coverage (balance pages only).
+  useEffect(() => {
+    if (!active || !ready || !coverage || periodCovered(context.from, context.to, coverage)) return;
+    const next = clampPeriod(context.from, context.to, coverage);
+    if (next) setContext(next);
+  }, [active, ready, coverage, context.from, context.to]);
+
+  const presets = coveredYears(coverage).flatMap((year) => [
     { id: `${year}`, label: `${year} рік`, ...yearPeriod(year) },
     ...([1, 2, 3, 4] as const).map((q) => ({ id: `${year}-q${q}`, label: `${year} · Q${q}`, ...quarterPeriod(year, q) })),
-  ]);
+  ]).filter((p) => periodCovered(p.from, p.to, coverage));
   const preset = presets.find((p) => p.from === context.from && p.to === context.to)?.id ?? "";
+  const locked = ready && !coverage;
+  const title = !active
+    ? "Період застосовується до балансу матерії та програвання світу"
+    : locked
+      ? "У шарі ще немає розрахунку світу: період недоступний"
+      : coverage
+        ? `Доступно ${coverage.from} — ${coverage.to}${coverage.forecast ? ` (прогноз після ${coverage.history_to})` : ""}`
+        : "";
   return (
-    <div className={`period-picker ${active ? "" : "inactive"}`} title={active ? "" : "Період застосовується до балансу матерії"}>
-      <small>ПЕРІОД</small>
+    <div className={`period-picker ${active ? "" : "inactive"} ${locked ? "locked" : ""}`} title={title}>
+      <small>
+        ПЕРІОД
+        <a href={hrefWithLayer("/compute")} className={`period-coverage ${coverage?.forecast ? "forecast" : ""}`} title="Налаштувати горизонт розрахунку">
+          {locked ? "немає розрахунку" : coverage ? `розраховано до ${coverage.to.split("-").reverse().join(".")}` : "…"}
+        </a>
+      </small>
       <div>
-        <select aria-label="Готовий період" value={preset} onChange={(e) => {
+        <select aria-label="Готовий період" value={preset} disabled={!coverage} onChange={(e) => {
           const chosen = presets.find((p) => p.id === e.target.value);
           if (chosen) setContext({ from: chosen.from, to: chosen.to });
         }}>
           <option value="">довільний</option>
           {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
-        <input type="date" aria-label="Початок періоду" value={context.from} max={context.to} onChange={(e) => e.target.value && setContext({ from: e.target.value })} />
+        <input type="date" aria-label="Початок періоду" value={context.from} disabled={!coverage} min={coverage?.from} max={context.to}
+          onChange={(e) => periodCovered(e.target.value, context.to, coverage) && setContext({ from: e.target.value })} />
         <span>—</span>
-        <input type="date" aria-label="Кінець періоду" value={context.to} min={context.from} onChange={(e) => e.target.value && setContext({ to: e.target.value })} />
+        <input type="date" aria-label="Кінець періоду" value={context.to} disabled={!coverage} min={context.from} max={coverage?.to}
+          onChange={(e) => periodCovered(context.from, e.target.value, coverage) && setContext({ to: e.target.value })} />
       </div>
     </div>
   );

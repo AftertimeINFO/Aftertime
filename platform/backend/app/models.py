@@ -160,7 +160,7 @@ class WorldEvent(Base):
     attributes: Mapped[dict] = mapped_column(JSONB, default=dict)
     __table_args__ = (
         CheckConstraint(
-            "provenance IN ('statistic', 'derived', 'assumed')",
+            "provenance IN ('statistic', 'derived', 'assumed', 'forecast')",
             name="ck_events_provenance",
         ),
     )
@@ -917,4 +917,25 @@ class LayerPromotion(Base):
     target_layer: Mapped[str] = mapped_column(String(20))
     note: Mapped[str] = mapped_column(Text, default="")
     summary: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorldComputation(Base):
+    """One computation of the world ledger: history up to ``history_to``, forecast to ``horizon``.
+
+    The latest successful computation defines the coverage of the layer: the balance
+    can be reported only for periods inside ``[data_from, horizon]``.
+    """
+
+    __tablename__ = "world_computations"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(20))
+    data_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    history_to: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    horizon: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    parameters: Mapped[dict] = mapped_column(JSONB, default=dict)
+    summary: Mapped[dict] = mapped_column(JSONB, default=dict)
+    note: Mapped[str] = mapped_column(Text, default="")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

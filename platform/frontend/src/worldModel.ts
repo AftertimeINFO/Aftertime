@@ -15,6 +15,9 @@ export type PilotPayload = {
   portions: Portion[];
   voyages: Voyage[];
   events: LedgerEvent[];
+  /** Net postings of each portion before the window: the player starts from them. */
+  initial?: Record<string, number>;
+  window?: { from: string; to: string };
   estimate: null | { portion: string; value_kg: number; low_kg: number | null; high_kg: number | null; valid_time: string; evidence: Record<string, any> };
 };
 export type LngLat = [number, number];
@@ -24,12 +27,14 @@ export type Timeline = {
   portions: string[];
   // cumulative balance per portion after each event: snapshots[i][j]
   snapshots: Float64Array[];
+  /** Balances before the first event (net postings before the playback window). */
+  initial?: Float64Array;
 };
 
-export function buildTimeline(events: LedgerEvent[], portions: string[]): Timeline {
+export function buildTimeline(events: LedgerEvent[], portions: string[], initial: Record<string, number> = {}): Timeline {
   const index = new Map(portions.map((id, i) => [id, i]));
   const sorted = [...events].sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
-  const running = new Float64Array(portions.length);
+  const running = Float64Array.from(portions, (id) => initial[id] ?? 0);
   const snapshots: Float64Array[] = [];
   for (const event of sorted) {
     for (const [entity, delta] of event.postings) {
@@ -38,7 +43,7 @@ export function buildTimeline(events: LedgerEvent[], portions: string[]): Timeli
     }
     snapshots.push(Float64Array.from(running));
   }
-  return { times: sorted.map((e) => Date.parse(e.t)), portions, snapshots };
+  return { times: sorted.map((e) => Date.parse(e.t)), portions, snapshots, initial: Float64Array.from(portions, (id) => initial[id] ?? 0) };
 }
 
 /** Index of the last event at or before t, or -1. */
@@ -53,7 +58,7 @@ export function lastIndexAt(times: number[], t: number): number {
 
 export function balancesAt(timeline: Timeline, t: number): Map<string, number> {
   const i = lastIndexAt(timeline.times, t);
-  const row = i >= 0 ? timeline.snapshots[i] : new Float64Array(timeline.portions.length);
+  const row = i >= 0 ? timeline.snapshots[i] : timeline.initial ?? new Float64Array(timeline.portions.length);
   return new Map(timeline.portions.map((id, j) => [id, row[j]]));
 }
 

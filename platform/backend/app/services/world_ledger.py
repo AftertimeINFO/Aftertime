@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.models import Entity, Posting, Relation, WorldEvent
 from app.world_core import CONSERVED_QUANTITY, EVENT_TYPE
 
-PROVENANCES = frozenset({"statistic", "derived", "assumed"})
+PROVENANCES = frozenset({"statistic", "derived", "assumed", "forecast"})
 RELATIVE_TOLERANCE = 1e-9
 
 

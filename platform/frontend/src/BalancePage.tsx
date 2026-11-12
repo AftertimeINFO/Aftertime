@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { request } from "./api";
 import { hrefWithLayer, periodBounds, useAppContext } from "./appContext";
+import { PROVENANCE_LABEL, periodCovered, useCoverage } from "./coverage";
 import {
   COLUMNS,
   LEVELS,
@@ -16,7 +17,6 @@ import {
 } from "./balance";
 
 const LAYER_LABEL: Record<string, string> = { dev: "DEV", preprod: "prePROD", prod: "PROD" };
-const PROVENANCE_LABEL: Record<string, string> = { statistic: "статистика", derived: "розрахунок", assumed: "припущення" };
 
 function dateLabel(iso: string): string {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("uk-UA", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" });
@@ -32,8 +32,14 @@ export default function BalancePage() {
   const [loading, setLoading] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
+  const covered = useCoverage();
+  const coverage = covered.overview?.coverage ?? null;
+  // Wait for the coverage: the period picker moves an uncovered period inside it first.
+  // Without any computation there is nothing to report: the request is not sent.
+  const waiting = covered.status === "loading" || (covered.status === "ready" && !periodCovered(context.from, context.to, coverage));
 
   useEffect(() => {
+    if (waiting) return;
     const controller = new AbortController();
     const bounds = periodBounds(context.from, context.to);
     const params = new URLSearchParams({ scope: context.scope, from: bounds.from, to: bounds.to, level });
@@ -53,7 +59,7 @@ export default function BalancePage() {
       })
       .finally(() => !controller.signal.aborted && setLoading(false));
     return () => controller.abort();
-  }, [context.scope, context.from, context.to, context.layer, level]);
+  }, [context.scope, context.from, context.to, context.layer, level, waiting]);
 
   const shownUnit = unit ?? (data ? suggestUnit(data.totals) : "t");
   const rows = useMemo(() => (data ? visibleRows(data.rows, collapsed) : []), [data, collapsed]);
@@ -125,6 +131,12 @@ export default function BalancePage() {
               {Object.entries(data.provenance).map(([name, share]) => `${PROVENANCE_LABEL[name] ?? name} ${Math.round(share * 100)}%`).join(" · ")}
             </span>
           )}
+          {coverage && (
+            <a className="balance-coverage" href={hrefWithLayer("/compute")} title="Налаштувати горизонт розрахунку">
+              Розраховано {dateLabel(coverage.from)} — {dateLabel(coverage.to)}
+              {coverage.forecast ? ` · прогноз після ${dateLabel(coverage.history_to)}` : ""}
+            </a>
+          )}
           <span className="balance-note">Маса, {MASS_UNITS.find((u) => u.id === shownUnit)?.label}. Внутрішні переміщення в межах scope в сальдо не впливають.</span>
         </div>
       )}
@@ -141,7 +153,13 @@ export default function BalancePage() {
           {context.layer !== "dev" && " Дані з'являться після завантаження реальних джерел або перенесення моделей у цей шар."}
         </div>
       )}
-      {!data && !error && <div className="balance-message">Розрахунок балансу…</div>}
+      {covered.status === "ready" && !coverage && (
+        <div className="balance-message">
+          У шарі {LAYER_LABEL[context.layer]} світ ще не розраховано, тому період недоступний.{" "}
+          <a href={hrefWithLayer("/compute")}>Розрахунок світу ↗</a>
+        </div>
+      )}
+      {!data && !error && (coverage || covered.status === "loading") && <div className="balance-message">Розрахунок балансу…</div>}
 
       {data && !data.empty && (
         <div className={`balance-table-wrap ${loading ? "loading" : ""}`}>

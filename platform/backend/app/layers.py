@@ -26,12 +26,12 @@ LAYER_POLICY: dict[Layer, dict] = {
     "dev": {
         "label": "DEV",
         "description": "Спрощене моделювання та відладка моделей",
-        "capabilities": ["balance", "world", "lab.edit", "lab.run", "qualification", "data", "promote"],
+        "capabilities": ["balance", "world", "lab.edit", "lab.run", "qualification", "data", "promote", "compute"],
     },
     "preprod": {
         "label": "prePROD",
         "description": "Валідація моделей на реальних даних перед PROD",
-        "capabilities": ["balance", "world", "lab.run", "qualification", "data", "promote"],
+        "capabilities": ["balance", "world", "lab.run", "qualification", "data", "promote", "compute"],
     },
     "prod": {
         "label": "PROD",

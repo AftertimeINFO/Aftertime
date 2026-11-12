@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -36,8 +36,23 @@ def db():
             session.rollback()
 
 
+CARGOES: list[int] = []
+
+
 def cargoes() -> int:
-    return round(PARAMETERS["flow_bbl_per_day"] * 365 / PARAMETERS["cargo_bbl"])
+    """Cargoes of the run: one refining event each."""
+    return CARGOES[-1]
+
+
+@pytest.fixture(autouse=True)
+def _count_cargoes(db):
+    CARGOES.append(
+        db.scalar(
+            select(func.count())
+            .select_from(WorldEvent)
+            .where(WorldEvent.run_id == RUN_ID, WorldEvent.event_type_id == "type:transform")
+        )
+    )
 
 
 def cargo_kg() -> float:
@@ -76,7 +91,40 @@ def test_regeneration_is_idempotent(db):
     after = db.scalar(
         select(func.count()).select_from(WorldEvent).where(WorldEvent.run_id == RUN_ID)
     )
-    assert after == before == cargoes() * 10
+    assert after == before
+    # Ten events per cargo; the return legs of the last voyages may end after the run.
+    assert cargoes() * 10 - len(VESSELS) <= after <= cargoes() * 10
+
+
+def test_history_years_follow_the_published_flows(db):
+    from app.world_pilot import HISTORY
+
+    for year, (bbl_per_day, provenance, _) in HISTORY.items():
+        start, end = datetime(year, 1, 1, tzinfo=UTC), datetime(year + 1, 1, 1, tzinfo=UTC)
+        refined = db.scalar(
+            select(func.count())
+            .select_from(WorldEvent)
+            .where(
+                WorldEvent.run_id == RUN_ID,
+                WorldEvent.event_type_id == "type:produce",
+                WorldEvent.occurred_at >= start,
+                WorldEvent.occurred_at < end,
+            )
+        )
+        expected = bbl_per_day * 365 / PARAMETERS["cargo_bbl"]
+        # The last cargoes of the run are cut where their refining would end after it.
+        assert abs(refined - expected) <= (5 if year == max(HISTORY) else 2), year
+        kinds = set(
+            db.scalars(
+                select(WorldEvent.provenance).where(
+                    WorldEvent.run_id == RUN_ID,
+                    WorldEvent.event_type_id == "type:produce",
+                    WorldEvent.occurred_at >= start + timedelta(days=5),
+                    WorldEvent.occurred_at < end,
+                )
+            )
+        )
+        assert kinds == {provenance}, year
 
 
 def test_vessel_locations_do_not_overlap(db):
@@ -103,8 +151,11 @@ def test_playback_payload(db):
         app.dependency_overrides.clear()
     assert response.status_code == 200
     payload = response.json()
-    assert payload["run_id"] == pilot_playback(db)["run_id"]
-    assert len(payload["voyages"]) == cargoes() * 2
+    assert payload["run_id"] == pilot_playback(None, None, db)["run_id"]
+    window = payload["window"]
+    span = datetime.fromisoformat(window["to"]) - datetime.fromisoformat(window["from"])
+    assert span <= timedelta(days=366)
+    assert payload["voyages"] and len(payload["voyages"]) < cargoes() * 2
     laden = [v for v in payload["voyages"] if v["direction"] == "laden"]
     assert all(
         datetime.fromisoformat(v["arrive"]) > datetime.fromisoformat(v["depart"]) for v in laden
@@ -112,6 +163,20 @@ def test_playback_payload(db):
     ids = {place["id"] for place in payload["places"]}
     assert {"place:ghawar", "asset:ras-tanura", "asset:sikka", "asset:jamnagar"} <= ids
     assert payload["estimate"]["evidence"]["class"] == "1P"
+
+    # A later window starts from the postings before it.
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        later = TestClient(app).get(
+            "/api/v1/world/pilot",
+            params={"from": "2024-01-01T00:00:00Z", "to": "2025-01-01T00:00:00Z"},
+        ).json()
+    finally:
+        app.dependency_overrides.clear()
+    ghawar = portion_id("place:ghawar", CRUDE)
+    before = balance_of(db, ghawar, "mass", at=datetime(2023, 12, 31, 23, 59, tzinfo=UTC))
+    assert later["initial"][ghawar] == pytest.approx(before)
+    assert all(e["t"] >= "2024-01-01" for e in later["events"])
 
 
 def test_refining_conserves_every_element(db):
@@ -160,7 +225,9 @@ def test_contents_emerge_from_containment(db):
     # The deposit holds its estimate minus the pilot's production; elements carry atom counts.
     end = datetime(2024, 6, 1, tzinfo=UTC)
     ghawar = contents(db, "place:ghawar", end)
-    expected = 48.25e9 * PARAMETERS["kg_per_bbl"] - cargoes() * cargo_kg()
+    produced = -balance_of(db, portion_id("place:ghawar", CRUDE), "mass", at=end)
+    assert produced > 0
+    expected = 48.25e9 * PARAMETERS["kg_per_bbl"] - produced
     assert ghawar["total_kg"] == pytest.approx(expected)
     carbon = next(e for e in ghawar["elements"] if e["symbol"] == "C")
     assert carbon["kg"] == pytest.approx(expected * 0.8465)

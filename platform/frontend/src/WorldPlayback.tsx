@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { request } from "./api";
+import { periodBounds, useAppContext } from "./appContext";
 import EntityCard from "./EntityCard";
 import { balancesAt, buildTimeline, lastIndexAt, vesselStates, type LedgerEvent, type LngLat, type PilotObject, type PilotPayload } from "./worldModel";
 
@@ -52,7 +53,16 @@ const mbbl = (kg: number, kgPerBbl: number) => kg / kgPerBbl / 1e6;
 const fmt = (value: number, digits = 1) => value.toLocaleString("uk-UA", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const date = (t: number) => new Date(t).toLocaleString("uk-UA", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
+/** Years of the playback window, e.g. "2024" or "2024–2025". */
+function windowLabel(data: PilotPayload): string {
+  if (!data.window) return String(data.parameters.year);
+  const first = data.window.from.slice(0, 4);
+  const last = new Date(Date.parse(data.window.to) - 1).toISOString().slice(0, 4);
+  return first === last ? first : `${first}–${last}`;
+}
+
 export default function WorldPlayback() {
+  const context = useAppContext();
   const [data, setData] = useState<PilotPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [t, setT] = useState(0);
@@ -71,20 +81,22 @@ export default function WorldPlayback() {
   const vesselMarkers = useRef(new Map<string, maplibregl.Marker>());
 
   useEffect(() => {
-    request<PilotPayload>("/world/pilot", undefined, 60_000)
+    const bounds = periodBounds(context.from, context.to);
+    request<PilotPayload>(`/world/pilot?${new URLSearchParams({ from: bounds.from, to: bounds.to })}`, undefined, 60_000)
       .then((payload) => {
         setData(payload);
         const requested = Date.parse(initial.get("t") || "");
         setT(Number.isFinite(requested) ? requested : Date.parse(payload.events[0]?.t ?? `${payload.parameters.year}-01-01T00:00:00Z`));
       })
       .catch((reason) => setError(String(reason?.message || reason)));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context.from, context.to]);
 
   const model = useMemo(() => {
     if (!data) return null;
     const routes: Record<string, LngLat[]> = {};
     for (const place of data.places) if (place.geometry?.type === "LineString") routes[place.id] = place.geometry.coordinates;
-    const timeline = buildTimeline(data.events, data.portions.map((p) => p.id));
+    const timeline = buildTimeline(data.events, data.portions.map((p) => p.id), data.initial);
     const sorted = [...data.events].sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
     const start = timeline.times[0] ?? 0;
     const end = Math.max(timeline.times[timeline.times.length - 1] ?? 0, ...data.voyages.map((v) => Date.parse(v.arrive)));
@@ -213,7 +225,7 @@ export default function WorldPlayback() {
       <header className="world-top">
         <div>
           <small>ПІЛОТ · БАЛАНС МАТЕРІЇ · НАБЛИЖЕННЯ</small>
-          <b>Arab Light: Гавар → Джамнагар, {data.parameters.year}</b>
+          <b>Arab Light: Гавар → Джамнагар, {windowLabel(data)}</b>
         </div>
         <div className="world-top-right">
           <a href="/world/entities" className="world-back">Усі сутності</a>

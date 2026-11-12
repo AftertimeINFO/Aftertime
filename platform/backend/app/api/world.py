@@ -1,16 +1,19 @@
 """Read API of the world core: entity browser, entity cards and pilot playback."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app import __version__
 from app.db import get_db
+from app.layers import LAYER_POLICY, current_layer
 from app.models import Entity, EntityExtent, Observation, Posting, Relation, Source, WorldEvent
 from app.services.world_balance import BalanceError, balance
+from app.services.world_compute import ComputeError, check_period, compute, coverage, overview
 from app.services.world_query import FAR_FUTURE, contents, operations, runs_of
 from app.services.world_scope import scope_tree
 from app.world_pilot import RUN_ID, SOURCE_ID, portion_id
@@ -190,11 +193,25 @@ def entity_operations(
 
 
 @router.get("/pilot")
-def pilot_playback(db: Session = Depends(get_db)) -> dict:
-    """Everything the 2D player needs for the pilot run, in one payload."""
+def pilot_playback(
+    start: datetime | None = Query(None, alias="from"),
+    end: datetime | None = Query(None, alias="to"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Everything the 2D player needs for the pilot run in a window of at most a year.
+
+    The window defaults to the first year of the computed coverage. ``initial`` holds the
+    net postings of every portion before the window, so the player starts from them.
+    """
     source = db.get(Source, SOURCE_ID)
     if source is None:
         raise HTTPException(404, "Pilot run is not seeded")
+    covered = coverage(db)
+    lo = _moment(start) if start else (
+        datetime.fromisoformat(covered["from"]).replace(tzinfo=UTC) if covered else datetime(2019, 1, 1, tzinfo=UTC)
+    )
+    hi = _moment(end) if end else lo + timedelta(days=366)
+    hi = min(hi, lo + timedelta(days=366))
 
     extents = db.execute(
         select(EntityExtent, Entity)
@@ -235,16 +252,24 @@ def pilot_playback(db: Session = Depends(get_db)) -> dict:
         )
     }
 
-    events = db.scalars(
-        select(WorldEvent).where(WorldEvent.run_id == RUN_ID).order_by(WorldEvent.occurred_at)
-    ).all()
+    window = (WorldEvent.run_id == RUN_ID, WorldEvent.occurred_at >= lo, WorldEvent.occurred_at < hi)
+    events = db.scalars(select(WorldEvent).where(*window).order_by(WorldEvent.occurred_at)).all()
     postings: dict[str, list] = {}
     for event_id, entity_id, delta in db.execute(
         select(Posting.event_id, Posting.entity_id, Posting.delta)
         .join(WorldEvent, WorldEvent.id == Posting.event_id)
-        .where(WorldEvent.run_id == RUN_ID, Posting.property == "mass")
+        .where(*window, Posting.property == "mass")
     ):
         postings.setdefault(event_id, []).append([entity_id, delta])
+    initial = {
+        entity_id: float(total)
+        for entity_id, total in db.execute(
+            select(Posting.entity_id, func.sum(Posting.delta))
+            .join(WorldEvent, WorldEvent.id == Posting.event_id)
+            .where(WorldEvent.run_id == RUN_ID, WorldEvent.occurred_at < lo, Posting.property == "mass")
+            .group_by(Posting.entity_id)
+        )
+    }
 
     arrivals = {
         e.attributes.get("voyage"): e.occurred_at
@@ -259,7 +284,11 @@ def pilot_playback(db: Session = Depends(get_db)) -> dict:
             "direction": e.attributes["direction"],
             "cargo_kg": e.attributes.get("cargo_kg", 0),
             "depart": e.occurred_at.isoformat(),
-            "arrive": arrivals[e.attributes["voyage"]].isoformat(),
+            "arrive": (
+                arrivals[e.attributes["voyage"]].isoformat()
+                if e.attributes["voyage"] in arrivals
+                else e.attributes.get("arrive_at")
+            ),
         }
         for e in events
         if e.event_type_id == "type:depart"
@@ -283,6 +312,9 @@ def pilot_playback(db: Session = Depends(get_db)) -> dict:
     ]
     return {
         "run_id": RUN_ID,
+        "window": {"from": lo.isoformat(), "to": hi.isoformat()},
+        "coverage": covered,
+        "initial": initial,
         "objects": objects,
         "source": {"id": source.id, "name": source.name, "license": source.license},
         "parameters": source.configuration,
@@ -330,6 +362,36 @@ def material_balance(
 ) -> dict:
     """Trial balance of matter for a scope and period, by level of matter."""
     try:
-        return balance(db, scope, _moment(start), _moment(end), level)
+        check_period(db, _moment(start), _moment(end))
+        result = balance(db, scope, _moment(start), _moment(end), level)
     except BalanceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ComputeError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    result["coverage"] = coverage(db)
+    return result
+
+
+class ComputeRequest(BaseModel):
+    horizon: date
+    growth_pct: float = 0.0
+    note: str = Field("", max_length=2000)
+
+
+@router.get("/coverage")
+def world_coverage(db: Session = Depends(get_db)) -> dict:
+    """How far the world is computed in this layer, yearly flows and the computation journal."""
+    return {"layer": current_layer.get(), **overview(db)}
+
+
+@router.post("/compute")
+def world_compute(body: ComputeRequest, db: Session = Depends(get_db)) -> dict:
+    """Recompute the world ledger from the start of history to the horizon (inclusive)."""
+    layer = current_layer.get()
+    if "compute" not in LAYER_POLICY[layer]["capabilities"]:
+        raise HTTPException(403, f"Розрахунок світу недоступний у шарі {LAYER_POLICY[layer]['label']}")
+    try:
+        return {"layer": layer, **compute(db, body.horizon, body.growth_pct, body.note)}
+    except ComputeError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
