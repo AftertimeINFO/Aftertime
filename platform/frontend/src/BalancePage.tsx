@@ -4,6 +4,7 @@ import { hrefWithLayer, periodBounds, useAppContext } from "./appContext";
 import { PROVENANCE_LABEL, periodCovered, useCoverage } from "./coverage";
 import { PeriodPicker } from "./PeriodSelect";
 import { ScopeBar } from "./ScopeSelect";
+import { SourcesBadge } from "./Sources";
 import { ReportMenu, useLongPressMenu, type ReportTarget } from "./ReportMenu";
 import { reportUrl } from "./report";
 import { openTab, usePaneTab } from "./tabs";
@@ -223,7 +224,10 @@ export default function BalancePage() {
                       title="Утримуйте ліву кнопку миші: оборотна відомість або графік цього потоку"
                       {...menu.bind({ row: { id: row.id, name: row.name }, flow: detail.event_type })}
                     >
-                      <td className="balance-name" style={{ paddingLeft: 40 + row.depth * 18 }}>{detail.event_type}</td>
+                      <td className="balance-name" style={{ paddingLeft: 40 + row.depth * 18 }}>
+                        {detail.event_type}
+                        <SourcesBadge sources={detail.sources} />
+                      </td>
                       {columns.map((column) => (
                         <td key={column.id} className={`col-${column.id}`}>
                           {detail[column.id] ? formatAmount(detail[column.id]!, shownUnit, column.signed) : ""}

@@ -1,33 +1,70 @@
 """Where Ghawar crude goes: known recipients from published Saudi statistics, else Unknown.
 
-Saudi crude output each year is used at home (refinery runs, crude burned in power
-plants) or exported (to countries with published import figures). Ghawar's output
-outside the pilot route to India is spread over the same recipients in proportion:
+Saudi crude output each year is used at home (refinery runs, crude burned directly) or
+exported (destination regions of OPEC's statistics). Ghawar's output outside the pilot
+route to India is spread over the same recipients in proportion:
 
     share     = (Ghawar output - pilot flow) / (Saudi output - Saudi crude to India)
     recipient = share x Saudi crude to that recipient                (derived)
     Unknown   = (Ghawar output - pilot flow) - sum of known recipients
 
 so volumes whose recipient is not published end in "Unknown recipient", and the field
-balance always shows the whole production. Years after the data repeat the last year's
-proportions (forecast).
+balance always shows the whole production. Before 1996 no recipient is published: all of
+it is Unknown. After the data the last year's proportions apply (forecast).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from app.world_history import DISPOSITION, Figure
 
 UNKNOWN = "place:unknown-recipient"
 
 # (id, name, kind, type, parent place, operator, description). Importing regions follow the
-# destination regions of OPEC's export statistics; domestic users are aggregate assets in
-# Saudi Arabia.
+# destination regions of OPEC's export statistics (their scheme changed in 2009 and 2016);
+# domestic users are aggregate assets in Saudi Arabia.
 RECIPIENTS: list[tuple[str, str, str, str, str, str | None, str]] = [
-    ('place:china', 'China', "place", "type:region", "place:land-surface", None, ""),
-    ('place:oecd-asia-pacific', 'Japan, South Korea and Oceania (OECD Asia Pacific)', "place", "type:region", "place:land-surface", None, ""),
-    ('place:other-asia', 'Other Asia (Taiwan, Singapore, Thailand and others)', "place", "type:region", "place:land-surface", None, ""),
-    ('place:europe', 'Europe (OECD Europe)', "place", "type:region", "place:land-surface", None, ""),
-    ('place:north-america', 'North America (OECD Americas)', "place", "type:region", "place:land-surface", None, ""),
-    ('place:africa', 'Africa (incl. Egypt)', "place", "type:region", "place:land-surface", None, ""),
-    ('place:middle-east', 'Other Middle East', "place", "type:region", "place:land-surface", None, ""),
+    ("place:china", "China", "place", "type:region", "place:land-surface", None, ""),
+    (
+        "place:oecd-asia-pacific",
+        "Japan, South Korea and Oceania (OECD Asia Pacific)",
+        "place",
+        "type:region",
+        "place:land-surface",
+        None,
+        "",
+    ),
+    (
+        "place:other-asia",
+        "Other Asia (Taiwan, Singapore, Thailand and others)",
+        "place",
+        "type:region",
+        "place:land-surface",
+        None,
+        "",
+    ),
+    (
+        "place:asia-pacific",
+        "Asia Pacific, not split by country (OPEC 1996-2015)",
+        "place",
+        "type:region",
+        "place:land-surface",
+        None,
+        "OPEC's Asia Pacific region before 2016 (China, Japan, Korea and others; India is"
+        " taken out from 2000, it is the pilot route).",
+    ),
+    ("place:europe", "Europe (OECD Europe)", "place", "type:region", "place:land-surface", None, ""),
+    (
+        "place:north-america",
+        "North America (OECD Americas)",
+        "place",
+        "type:region",
+        "place:land-surface",
+        None,
+        "",
+    ),
+    ("place:latin-america", "Latin America", "place", "type:region", "place:land-surface", None, ""),
+    ("place:africa", "Africa (incl. Egypt)", "place", "type:region", "place:land-surface", None, ""),
+    ("place:middle-east", "Other Middle East", "place", "type:region", "place:land-surface", None, ""),
     (
         "asset:saudi-refineries",
         "Saudi refineries (aggregate)",
@@ -54,54 +91,9 @@ RECIPIENTS: list[tuple[str, str, str, str, str, str | None, str]] = [
         "place:earth",
         None,
         "Produced volumes whose recipient is not published: other export destinations,"
-        " stock changes and statistical differences.",
+        " stock changes, statistical differences, and all years before 1996.",
     ),
 ]
-
-_ASB22 = "OPEC Annual Statistical Bulletin 2022"
-_ASB26 = "OPEC Annual Statistical Bulletin 2026"
-_JODI = "JODI Oil World Database (12 monthly values / days)"
-
-
-def _asb(year: int) -> str:
-    return _ASB22 if year <= 2020 else _ASB26
-
-
-# Saudi crude to each known recipient, thousand barrels per day, by year. Exports by
-# destination region are OPEC's exporter-side figures (India is the pilot's own series);
-# refinery runs are OPEC refinery throughput; direct use (crude burn) is JODI.
-_EXPORTS_KBD: dict[str, list[int]] = {
-    'place:china': [1671, 1701, 1758, 1754, 1608, 1495, 1620],
-    'place:oecd-asia-pacific': [1866, 1855, 1754, 1978, 1943, 1787, 1858],
-    'place:other-asia': [781, 582, 580, 1046, 1010, 907, 1067],
-    'place:europe': [797, 756, 517, 759, 678, 721, 660],
-    'place:north-america': [561, 549, 422, 530, 347, 320, 322],
-    'place:africa': [177, 202, 196, 237, 175, 108, 115],
-    'place:middle-east': [266, 212, 209, 151, 135, 30, 39],
-}
-_REFINERY_KBD = [2484, 2173, 2475, 2702, 2514, 2591, 2750]
-_BURN_KBD = [425, 422, 437, 487, 473, 455, 426]
-_YEARS = list(range(2019, 2026))
-
-SAUDI_DISPOSITION: dict[int, dict[str, tuple[float, str, str]]] = {
-    year: {
-        **{
-            region: (values[i] * 1000.0, "statistic", f"{_asb(year)}: Saudi crude exports to this region, {values[i]} kb/d")
-            for region, values in _EXPORTS_KBD.items()
-        },
-        "asset:saudi-refineries": (
-            _REFINERY_KBD[i] * 1000.0,
-            "statistic",
-            f"{_asb(year)}: Saudi refinery throughput {_REFINERY_KBD[i]} kb/d",
-        ),
-        "asset:saudi-crude-burn": (
-            _BURN_KBD[i] * 1000.0,
-            "derived",
-            f"{_JODI}: Saudi crude direct use {_BURN_KBD[i]} kb/d",
-        ),
-    }
-    for i, year in enumerate(_YEARS)
-}
 
 
 @dataclass(frozen=True)
@@ -110,43 +102,56 @@ class Share:
     bbl_per_day: float
     provenance: str
     reference: str
+    sources: list = field(default_factory=list)
 
 
 def data_year(year: int) -> int | None:
-    """The year whose published recipients apply: the year itself, else the closest one."""
-    if year in SAUDI_DISPOSITION:
+    """The year whose published recipients apply: the year itself, the last year with data
+    after the data, none before it."""
+    if year in DISPOSITION:
         return year
-    earlier = [y for y in SAUDI_DISPOSITION if y <= year]
-    if earlier:
-        return max(earlier)
-    return min(SAUDI_DISPOSITION) if SAUDI_DISPOSITION else None
+    if not DISPOSITION or year < min(DISPOSITION):
+        return None
+    return max(y for y in DISPOSITION if y <= year)
 
 
-def allocate(rest_bbl: float, year: int | None, base_bbl: float, forecast: bool) -> list[Share]:
+def allocate(
+    rest_bbl: float,
+    known: dict[str, Figure],
+    base_bbl: float,
+    field_provenance: str,
+    field_sources: list,
+) -> list[Share]:
     """Spread ``rest_bbl`` (Ghawar output outside the pilot, bbl/d) over the recipients.
 
-    ``year`` is the data year (see ``data_year``) and ``base_bbl`` the Saudi crude of that
-    year outside India, which the published recipient volumes are a part of.
+    ``known`` are the published users of Saudi crude in the data year and ``base_bbl`` the
+    Saudi crude of that year outside India, which they are a part of.
     """
     if rest_bbl <= 0:
         return []
-    known = SAUDI_DISPOSITION.get(year, {}) if year is not None else {}
     share = rest_bbl / base_bbl if base_bbl > 0 else 0.0
-    provenance = "forecast" if forecast else "derived"
+    forecast = field_provenance == "forecast"
+
+    def provenance(figure_provenance: str) -> str:
+        if forecast:
+            return "forecast"
+        return "assumed" if "assumed" in (figure_provenance, field_provenance) else "derived"
+
     rows = [
         Share(
             recipient,
-            share * bbl,
-            provenance,
-            f"{reference}; x {share:.4f} (Ghawar share of Saudi crude outside the pilot)",
+            share * figure.bbl_per_day,
+            provenance(figure.provenance),
+            f"{figure.note}; x {share:.4f} (Ghawar part of Saudi crude outside the pilot)",
+            _merge(field_sources, figure.sources),
         )
-        for recipient, (bbl, _, reference) in known.items()
+        for recipient, figure in known.items()
     ]
     total = sum(row.bbl_per_day for row in rows)
     if total > rest_bbl:
         # Published uses exceed production (stock draws): scale them to the production.
         rows = [
-            Share(r.recipient, r.bbl_per_day * rest_bbl / total, r.provenance, f"{r.reference}; scaled")
+            Share(r.recipient, r.bbl_per_day * rest_bbl / total, r.provenance, f"{r.reference}; scaled", r.sources)
             for r in rows
         ]
         total = rest_bbl
@@ -154,8 +159,18 @@ def allocate(rest_bbl: float, year: int | None, base_bbl: float, forecast: bool)
         Share(
             UNKNOWN,
             rest_bbl - total,
-            provenance,
+            "forecast" if forecast else ("assumed" if field_provenance == "assumed" else "derived"),
             "Remainder: Ghawar output not matched to a published recipient",
+            list(field_sources),
         )
     )
     return [row for row in rows if row.bbl_per_day > 0]
+
+
+def _merge(*lists: list) -> list:
+    merged: list = []
+    for items in lists:
+        for item in items:
+            if item not in merged:
+                merged.append(item)
+    return merged

@@ -4,6 +4,7 @@ import { hrefWithLayer, periodBounds, useAppContext } from "./appContext";
 import { COLUMNS, MASS_UNITS, formatAmount, type BalanceColumn, type BalanceLevel, type BalanceValues, type MassUnit } from "./balance";
 import { periodCovered, useCoverage } from "./coverage";
 import { PeriodPicker } from "./PeriodSelect";
+import { SourceList } from "./Sources";
 import {
   FLOWS,
   STEPS,
@@ -156,6 +157,12 @@ export default function ReportPage({ kind }: { kind: ReportKind }) {
               openTab({ kind: "balance", scope: context.scope, scopeName: tab?.scopeName, from: context.from, to: context.to });
             }}>Баланс scope ↗</a>
           </p>
+          {!!data.sources?.length && (
+            <section className="report-sources">
+              <h2>Джерела даних</h2>
+              <SourceList sources={data.sources} />
+            </section>
+          )}
         </div>
       )}
     </div>

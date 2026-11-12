@@ -35,7 +35,7 @@ def year(y: int) -> tuple[datetime, datetime]:
 
 def test_compute_extends_history_with_a_forecast(db):
     result = compute(db, date(2027, 12, 31), growth_pct=10.0, note="test")
-    assert result["coverage"]["from"] == "2019-01-01"
+    assert result["coverage"]["from"] == "1951-01-01"
     assert result["coverage"]["to"] == "2027-12-31"
     assert result["coverage"]["history_to"] == "2025-12-31"
     assert result["coverage"]["forecast"] is True
@@ -69,12 +69,12 @@ def test_period_outside_coverage_is_refused(db):
     with pytest.raises(ComputeError):
         check_period(db, *year(2026))
     with pytest.raises(ComputeError):
-        check_period(db, *year(2018))
+        check_period(db, *year(1950))
 
 
 def test_bad_horizons_are_refused(db):
     with pytest.raises(ComputeError):
-        compute(db, date(2019, 1, 15))
+        compute(db, date(1951, 1, 15))
     with pytest.raises(ComputeError):
         compute(db, date(2075, 1, 1))
     with pytest.raises(ComputeError):

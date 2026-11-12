@@ -113,7 +113,7 @@ def _ledger(
         text(
             """
             SELECT p.event_id, p.entity_id, p.delta, ev.occurred_at, ev.provenance,
-                   ev.event_type_id, t.name AS type_name
+                   ev.event_type_id, t.name AS type_name, ev.attributes -> 'sources' AS sources
             FROM postings p
             JOIN events ev ON ev.id = p.event_id
             JOIN entities t ON t.id = ev.event_type_id
@@ -129,6 +129,7 @@ def _ledger(
             row.occurred_at,
             row.provenance,
             EVENT_LABELS.get(row.event_type_id, row.type_name),
+            row.sources or [],
         )
 
     # Boundaries where a moving carrier changes container, with the carriers concerned.
@@ -144,14 +145,14 @@ def _ledger(
     for row in db.execute(
         text(
             """
-            SELECT subject_id, value, valid_time FROM observations
+            SELECT subject_id, value, valid_time, evidence FROM observations
             WHERE property = 'mass' AND unit = 'kg' AND subject_id = ANY(:ids)
               AND valid_time > :start AND valid_time <= :end
             """
         ).bindparams(bindparam("ids", type_=ARRAY(String))),
         {"ids": portions, "start": start, "end": end},
     ):
-        estimates[row.valid_time].append((row.subject_id, float(row.value)))
+        estimates[row.valid_time].append((row.subject_id, float(row.value), row.evidence or {}))
 
     # Timeline: carrier crossings at a moment come before the postings of that moment,
     # so the cargo crosses with the amount it had just before; an estimate comes last
@@ -174,12 +175,14 @@ def _ledger(
         bucket = max(bisect_left(edges, moment) - 1, 0)
         flows, breakdown = flows_at[bucket], breakdown_at[bucket]
         if kind == 2:
-            for portion, value in estimates[moment]:
+            for portion, value, evidence in estimates[moment]:
                 change = value - running[portion]
                 running[portion] = value
                 if change and index.contains(portion, moment):
                     flows[materials[portion]]["revision"] += change
-                    breakdown[materials[portion]][(REVISION, "", None)]["revision"] += change
+                    entry = breakdown[materials[portion]][(REVISION, "", None)]
+                    entry["revision"] += change
+                    _note(entry, evidence.get("sources") or _evidence_source(evidence))
             continue
         if kind == 0:
             for carrier in moved_at[moment]:
@@ -197,7 +200,7 @@ def _ledger(
                     )
             continue
 
-        _, prov, type_name = headers[event_id]
+        _, prov, type_name, sources = headers[event_id]
         postings = postings_by_event[event_id]
         inside = [
             (entity, delta)
@@ -221,7 +224,9 @@ def _ledger(
                 column = "inflow" if delta > 0 else "outflow"
                 flows[material][column] += abs(delta)
                 arrow = "←" if delta > 0 else "→"
-                breakdown[material][(type_name, arrow, other)][column] += abs(delta)
+                entry = breakdown[material][(type_name, arrow, other)]
+                entry[column] += abs(delta)
+                _note(entry, sources)
             continue
         net: dict[str, float] = defaultdict(float)
         for entity, delta in inside:
@@ -229,12 +234,16 @@ def _ledger(
         if len(net) > 1:
             for material, delta in net.items():
                 flows[material]["transform"] += delta
-                breakdown[material][(type_name, "", None)]["transform"] += delta
+                entry = breakdown[material][(type_name, "", None)]
+                entry["transform"] += delta
+                _note(entry, sources)
         else:
             material = next(iter(net))
             turnover = sum(delta for _, delta in inside if delta > 0)
             flows[material]["internal"] += turnover
-            breakdown[material][(type_name, "", None)]["internal"] += turnover
+            entry = breakdown[material][(type_name, "", None)]
+            entry["internal"] += turnover
+            _note(entry, sources)
     labelled = [_label_breakdown(db, breakdown) for breakdown in breakdown_at]
     if len(edges) == 1:
         return flows_at[0], labelled[0], provenance
@@ -264,7 +273,10 @@ def _label_breakdown(db: Session, breakdown: dict) -> dict:
         for (name, arrow, other), values in by_key.items():
             label = f"{name} {arrow} {holders.get(other, other)}" if other else name
             for column, amount in values.items():
-                rows[label][column] += amount
+                if column == "sources":
+                    _note(rows[label], list(amount.values()))
+                else:
+                    rows[label][column] += amount
         labelled[material] = rows
     return labelled
 
@@ -393,10 +405,42 @@ def _substance_rows(db: Session, per_material: dict[str, dict], breakdown: dict)
 def _breakdown_rows(by_type: dict) -> list[dict]:
     rows = []
     for name, values in sorted(by_type.items()):
-        kept = {column: amount for column, amount in values.items() if abs(amount) > 1e-6}
+        kept = {
+            column: amount
+            for column, amount in values.items()
+            if column != "sources" and abs(amount) > 1e-6
+        }
         if kept:
-            rows.append({"event_type": name, **kept})
+            sources = values.get("sources")
+            rows.append(
+                {
+                    "event_type": name,
+                    **kept,
+                    "sources": list(sources.values())[:MAX_SOURCES] if isinstance(sources, dict) else [],
+                }
+            )
     return rows
+
+
+MAX_SOURCES = 12
+
+
+def _note(entry: dict, sources: list | None) -> None:
+    """Remember the sources (``{"title", "url"}``) behind an amount of a breakdown row."""
+    if not sources:
+        return
+    known = entry.get("sources")
+    if not isinstance(known, dict):
+        known = entry["sources"] = {}
+    for source in sources:
+        if isinstance(source, dict) and source.get("title"):
+            known.setdefault(source.get("url") or source["title"], source)
+
+
+def _evidence_source(evidence: dict) -> list[dict]:
+    """Source of an estimate, from its evidence."""
+    title = evidence.get("reference")
+    return [{"title": title, "url": evidence.get("url")}] if title else []
 
 
 def _element_rows(db: Session, per_material: dict[str, dict]) -> tuple[list[dict], bool]:
@@ -573,6 +617,7 @@ def balance_series(
     points = []
     name = None
     flows_seen: set[str] = set()
+    sources: dict[str, dict] = {}
     for i, (lo, hi) in enumerate(zip(bounds, bounds[1:], strict=False)):
         per_material: dict[str, dict[str, float]] = {}
         flows = flows_at[i]
@@ -591,6 +636,9 @@ def balance_series(
             name = row["name"]
             for item in row.get("breakdown", []):
                 flows_seen.add(item["event_type"])
+                if flow is None or item["event_type"] == flow:
+                    for source in item.get("sources", []):
+                        sources.setdefault(source.get("url") or source["title"], source)
             if flow is None:
                 values = row["values"]
             else:
@@ -622,4 +670,5 @@ def balance_series(
         "period": {"from": start.isoformat(), "to": end.isoformat()},
         "points": points,
         "totals": totals,
+        "sources": list(sources.values()),
     }

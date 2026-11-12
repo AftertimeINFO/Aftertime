@@ -17,6 +17,7 @@ export type Series = {
   unit: "kg";
   points: SeriesPoint[];
   totals: BalanceValues;
+  sources?: { title: string; url?: string | null }[];
 };
 
 export const STEPS: { id: ReportStep; label: string; months: number }[] = [

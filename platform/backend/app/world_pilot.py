@@ -1,22 +1,21 @@
-"""Pilot: Arab Light crude from Ghawar to Jamnagar, from 2019 history to a forecast horizon.
+"""Pilot: Ghawar crude oil from 1951, and the route to Jamnagar from 2000, to a forecast.
 
 The pilot is a thin vertical slice through the world core (see
 docs/en/design/MATTER_FLOW_AND_LOCATIONS.md, section 9). It seeds places, assets,
-vessels and portions as ordinary entities, a reserve estimate as an observation,
-and turns yearly flow figures (history, then a forecast) into a deterministic sequence
-of ledger events:
+vessels and portions as ordinary entities, reserve estimates as observations, and turns
+yearly figures (history, then a forecast) into a deterministic sequence of ledger events.
 
-    extract -> transfer -> load -> depart -> arrive -> discharge -> transfer -> transform
+* Ghawar output 1951-2025 (``GHAWAR_HISTORY``, see ``world_history``) leaves the field.
+* From 2000 (Jamnagar's first full year) Saudi crude to India (``HISTORY``) travels the
+  pilot route as cargoes:
+  extract -> transfer -> load -> depart -> arrive -> discharge -> transfer -> transform
+* The rest leaves the field monthly to the users of Saudi crude known from published
+  statistics, and to "Unknown recipient" for the volumes no statistic places
+  (``world_disposition``).
+* Remaining reserves: Aramco's end-2018 figure, the same plus the production since 1951
+  at the start (back-calculated), and Aramco's reported reserves for later year-ends.
 
-Yearly volumes of Saudi crude delivered to India come from published trade figures
-(``HISTORY``, each with its reference); years after the history are a forecast. Timings,
-vessels and the single route are assumptions; every event carries its provenance.
-
-The rest of Ghawar's output (``GHAWAR_HISTORY``: Saudi crude output times Ghawar's share
-of Aramco's capacity) leaves the field monthly to the recipients of Saudi crude known from
-published statistics, and to "Unknown recipient" for the volumes no statistic places
-(see ``world_disposition``). Remaining reserves follow Aramco's reported crude and
-condensate reserves year by year (``ARAMCO_RESERVES``), as new estimates of the deposit.
+Every event and estimate names its sources (``sources`` attribute: title and link).
 """
 
 import json
@@ -31,45 +30,34 @@ from sqlalchemy.orm import Session
 from app.models import Entity, EntityExtent, Observation, Posting, Relation, Source, WorldEvent
 from app.services.world_ledger import PostingInput, check_balance, conserved_units
 from app.world_core import seed_world_core
-from app.world_disposition import RECIPIENTS, SAUDI_DISPOSITION, allocate, data_year
+from app.world_disposition import RECIPIENTS, allocate, data_year
+from app.world_history import (
+    CARGO_FROM_YEAR,
+    DISPOSITION,
+    GHAWAR,
+    INDIA,
+    SAUDI_PRODUCTION,
+    cumulative_ghawar_bbl,
+)
+from app.world_sources import source, sources
 
 RUN_ID = "pilot-saudi-india"
 LEGACY_RUN_IDS = ("pilot-saudi-india-2023",)
 SOURCE_ID = "aftertime-pilot-saudi-india"
 YEAR = 2023  # reference year of the first pilot, kept for playback defaults
 
-# Saudi crude delivered to India per calendar year, barrels per day:
-# (bbl/d, provenance, reference). "statistic" is a published annual figure; "derived" is
-# computed from a published share or from fiscal-year (April-March) tonnage at 7.33 bbl/t.
+# Saudi crude delivered to India per calendar year on the pilot route, barrels per day:
+# (bbl/d, provenance, note); the publications are in ``world_history.INDIA``.
 HISTORY: dict[int, tuple[float, str, str]] = {
-    2019: (855_000, "statistic", "Argus Media: India's Saudi crude imports 855,000 b/d in 2019"),
-    2020: (753_000, "statistic", "Argus Media: 753,000 b/d in 2020 (Covid-19 demand loss)"),
-    2021: (670_000, "derived", "NBR: 16% of India's 4.2 mb/d crude imports in 2021"),
-    2022: (793_000, "derived", "Embassy of India, Riyadh: 39.47 Mt in FY2022-23"),
-    2023: (708_000, "derived", "Informist: 15% of India's 4.72 mb/d crude imports in 2023"),
-    2024: (626_000, "statistic", "Informist / MoneyWire: 625,997 b/d in 2024"),
-    2025: (705_000, "derived", "Embassy of India, Riyadh: 33.14 Mt FY2024-25, 35.88 Mt FY2025-26"),
+    year: (figure.bbl_per_day, figure.provenance, figure.note) for year, figure in INDIA.items()
 }
-# Ghawar's share of Saudi crude output: its maximum sustainable capacity over Aramco's
-# (3.8 of 12.0 mb/d, Saudi Aramco bond prospectus, April 2019, as of 31.12.2018).
-GHAWAR_SHARE = 3.8 / 12.0
-GHAWAR_SHARE_REFERENCE = (
-    "Saudi Aramco bond prospectus, April 2019: Ghawar MSC 3.8 mb/d of Aramco's 12.0 mb/d"
-)
-# Saudi crude oil output per calendar year, barrels per day: (bbl/d, reference).
+# Saudi crude oil output per calendar year, barrels per day: (bbl/d, note).
 SAUDI_CRUDE: dict[int, tuple[float, str]] = {
-    2019: (9_808_000, "OPEC Annual Statistical Bulletin 2020: 9.81 mb/d"),
-    2020: (9_213_000, "OPEC data via Arab News: 9.22 mb/d"),
-    2021: (9_125_000, "OPEC Annual Statistical Bulletin 2022 via S&P Global: 9.125 mb/d"),
-    2022: (10_591_000, "OPEC Annual Statistical Bulletin 2023 (EIA: 10.4-10.6 mb/d)"),
-    2023: (9_606_000, "OPEC Annual Statistical Bulletin 2025: 9,606 kb/d"),
-    2024: (8_955_000, "OPEC Annual Statistical Bulletin 2025: 8,955 kb/d"),
-    2025: (9_484_000, "GASTAT: 3,461.8 million barrels in 2025"),
+    year: (figure.bbl_per_day, figure.note) for year, figure in SAUDI_PRODUCTION.items()
 }
-# Whole Ghawar output, barrels per day: derived from the two figures above.
+# Whole Ghawar output per year, barrels per day: (bbl/d, provenance, note).
 GHAWAR_HISTORY: dict[int, tuple[float, str, str]] = {
-    year: (bbl * GHAWAR_SHARE, "derived", f"{reference}; x {GHAWAR_SHARE:.4f} ({GHAWAR_SHARE_REFERENCE})")
-    for year, (bbl, reference) in SAUDI_CRUDE.items()
+    year: (figure.bbl_per_day, figure.provenance, figure.note) for year, figure in GHAWAR.items()
 }
 # Entities of earlier versions of the pilot, removed when it is seeded again.
 LEGACY_ENTITIES = ("portion:ghawar-other-offtake:arab-light", "place:ghawar-other-offtake")
@@ -77,6 +65,16 @@ LEGACY_ENTITIES = ("portion:ghawar-other-offtake:arab-light", "place:ghawar-othe
 # Saudi Aramco proved reserves of crude oil and condensate, billion barrels, 31 December:
 # (value, reference). Ghawar's estimate of a year-end follows them in proportion to its
 # end-2018 figure (48.25 of 201.4): the only field figure Aramco has published.
+ARAMCO_REPORT = {
+    2018: "aramco-ara-2019",
+    2019: "aramco-ara-2019",
+    2020: "aramco-ara-2020",
+    2021: "aramco-ara-2022",
+    2022: "aramco-ara-2022",
+    2023: "aramco-ara-2024",
+    2024: "aramco-ara-2024",
+    2025: "aramco-ara-2025",
+}
 ARAMCO_RESERVES: dict[int, tuple[float, str]] = {
     2018: (201.4, "Saudi Aramco Annual Report 2019: crude oil and condensate reserves under the Concession, 201.4 bn bbl"),
     2019: (201.9, "Saudi Aramco Annual Report 2019: crude oil and condensate reserves under the Concession, 201.9 bn bbl"),
@@ -88,8 +86,12 @@ ARAMCO_RESERVES: dict[int, tuple[float, str]] = {
     2025: (186.5, "Saudi Aramco Annual Report 2025: crude oil and condensate reserves under the Concession, 186.5 bn bbl"),
 }
 
-HISTORY_FROM = datetime(min(HISTORY), 1, 1, tzinfo=UTC)
-HISTORY_TO = datetime(max(HISTORY) + 1, 1, 1, tzinfo=UTC)
+HISTORY_FROM = datetime(min(GHAWAR_HISTORY), 1, 1, tzinfo=UTC)
+HISTORY_TO = datetime(max(GHAWAR_HISTORY) + 1, 1, 1, tzinfo=UTC)
+CARGO_FROM = datetime(CARGO_FROM_YEAR, 1, 1, tzinfo=UTC)
+# The deposit before its first production: Aramco's end-2018 reserves plus the production
+# of 1951-2018 (back-calculated).
+INITIAL_ESTIMATE_TIME = datetime(min(GHAWAR_HISTORY) - 1, 12, 31, tzinfo=UTC)
 MAX_HORIZON = datetime(2051, 1, 1, tzinfo=UTC)
 
 # Assumptions of the approximation. Stored on the source so the API can show them.
@@ -110,18 +112,22 @@ PARAMETERS = {
         "type:other-refinery-output": 0.20,
     },
     "notes": [
-        "Yearly flow volumes 2019-2025 are published trade figures or derived from published"
-        " shares and fiscal-year tonnage (see history); later years are a forecast.",
+        "Saudi crude to India from 2000 (Jamnagar's first full year): UN Comtrade 2006-2015,"
+        " OPEC exports to India 2016-2025, interpolated 2000-2005; later years are a forecast.",
+        "Ghawar output 1951-2018 is reconstructed: its share of Saudi output is fixed at the"
+        " years with a published Ghawar figure and interpolated in between; it meets the"
+        " published cumulative production (about 66 bn bbl by 2007, 85 bn bbl by 2018).",
         "The whole flow is routed through Sikka and Jamnagar; in reality it is split between"
         " several Indian ports and refineries.",
-        "Ghawar output is Saudi crude output times Ghawar's share of Aramco's capacity"
-        " (3.8 of 12.0 mb/d). What does not go to India leaves the field monthly to the"
+        "From 2019 Ghawar output is Saudi crude output times Ghawar's share of Aramco's"
+        " capacity (3.8 of 12.0 mb/d). What does not go to India leaves the field monthly to the"
         " published recipients of Saudi crude (Saudi refineries, crude burn, importing"
         " countries) in proportion; volumes without a published recipient go to"
         " 'Unknown recipient'. Transport to these recipients is not modelled.",
-        "Remaining Ghawar reserves are re-estimated each year-end in proportion to Saudi"
-        " Aramco's reported crude and condensate reserves (48.25 of 201.4 bn bbl at"
-        " end-2018); the balance shows the change as a revision.",
+        "Remaining Ghawar reserves are re-estimated each year-end from 2019 in proportion"
+        " to Saudi Aramco's reported crude and condensate reserves (48.25 of 201.4 bn bbl at"
+        " end-2018); the balance shows the change as a revision. The deposit starts in 1951"
+        " with 48.25 bn bbl plus the reconstructed production of 1951-2018.",
         "Vessels are synthetic. Sea lane and facility coordinates are schematic.",
         "Refinery yields are assumed mass shares that sum to one.",
         "Element compositions are typical values; the composition of other refinery outputs"
@@ -430,10 +436,6 @@ def seed_pilot_world(db: Session) -> None:
                     for year, (bbl, prov, ref) in HISTORY.items()
                 },
                 "aramco_reserves": {str(y): v for y, (v, _) in ARAMCO_RESERVES.items()},
-                "saudi_disposition": {
-                    str(year): {r: bbl for r, (bbl, _, _) in rows.items()}
-                    for year, rows in SAUDI_DISPOSITION.items()
-                },
                 "ghawar_history": {
                     str(year): {"bbl_per_day": bbl, "provenance": prov, "reference": ref}
                     for year, (bbl, prov, ref) in GHAWAR_HISTORY.items()
@@ -570,9 +572,17 @@ def seed_pilot_world(db: Session) -> None:
                 epistemic_status="estimated",
                 valid_time=GHAWAR_ESTIMATE["valid_time"],
                 source_id=SOURCE_ID,
-                evidence={**GHAWAR_ESTIMATE["evidence"], "value_bbl": GHAWAR_ESTIMATE["bbl"]},
+                evidence={},
             )
         )
+    db.flush()
+    first_estimate = db.get(Observation, estimate_id)
+    first_estimate.evidence = {
+        **GHAWAR_ESTIMATE["evidence"],
+        "value_bbl": GHAWAR_ESTIMATE["bbl"],
+        "sources": sources("aramco-prospectus-2019"),
+        "url": source("aramco-prospectus-2019")["url"],
+    }
     # Later year-ends: the end-2018 figure scaled by Aramco's reported reserves.
     for year, (bbl, valid_time, evidence) in ghawar_estimates().items():
         if year == GHAWAR_ESTIMATE["valid_time"].year:
@@ -595,6 +605,22 @@ def ghawar_estimates() -> dict[int, tuple[float, datetime, dict]]:
     first = GHAWAR_ESTIMATE["valid_time"].year
     base = ARAMCO_RESERVES[first][0]
     rows = {}
+    produced = cumulative_ghawar_bbl(min(GHAWAR_HISTORY), first)
+    initial = GHAWAR_ESTIMATE["bbl"] + produced
+    rows[INITIAL_ESTIMATE_TIME.year] = (
+        initial,
+        INITIAL_ESTIMATE_TIME,
+        {
+            "system": "PRMS",
+            "class": "1P",
+            "basis": "remaining proved reserves, liquids; back-calculated",
+            "reference": f"48.25 bn bbl (end-{first}) + reconstructed Ghawar output"
+            f" {min(GHAWAR_HISTORY)}-{first} ({produced / 1e9:.1f} bn bbl)",
+            "provenance": "derived",
+            "value_bbl": initial,
+            "sources": sources("aramco-prospectus-2019", "iea-weo-2008", "geoexpro-2010"),
+        },
+    )
     for year, (reserves, reference) in sorted(ARAMCO_RESERVES.items()):
         if year < first:
             continue
@@ -611,7 +637,12 @@ def ghawar_estimates() -> dict[int, tuple[float, datetime, dict]]:
                 "provenance": "derived",
             }
         )
-        rows[year] = (bbl, datetime(year, 12, 31, tzinfo=UTC), {**evidence, "value_bbl": bbl})
+        refs = sources("aramco-prospectus-2019", ARAMCO_REPORT[year])
+        rows[year] = (
+            bbl,
+            datetime(year, 12, 31, tzinfo=UTC),
+            {**evidence, "value_bbl": bbl, "sources": refs},
+        )
     return rows
 
 
@@ -637,6 +668,8 @@ class _Vessel:
 
 def flow_bbl_per_day(at: datetime, growth_pct: float = 0.0) -> tuple[float, str]:
     """Flow rate and provenance at a moment: history, then the last year grown yearly."""
+    if at.year < CARGO_FROM_YEAR:
+        return 0.0, "statistic"
     if at.year in HISTORY:
         bbl, provenance, _ = HISTORY[at.year]
         return bbl, provenance
@@ -662,10 +695,20 @@ def recipients_of(at: datetime, growth_pct: float = 0.0) -> list:
     field_rate, field_provenance = ghawar_bbl_per_day(at, growth_pct)
     pilot_rate, _ = flow_bbl_per_day(at, growth_pct)
     year = data_year(at.year)
-    # Recipients take the same part of Saudi crude outside India as in the data year
-    # (without data for the year itself: the closest year with data).
-    base = SAUDI_CRUDE[year][0] - HISTORY[year][0] if year in SAUDI_CRUDE else 0.0
-    return allocate(field_rate - pilot_rate, year, base, field_provenance == "forecast")
+    # Recipients take the same part of Saudi crude outside the pilot as in the data year
+    # (after the data: the last year with data; before 1996 nothing is published).
+    base = 0.0
+    if year is not None:
+        india = INDIA[year].bbl_per_day if year in INDIA else 0.0
+        base = SAUDI_PRODUCTION[year].bbl_per_day - india
+    field_year = min(max(at.year, min(GHAWAR)), max(GHAWAR))
+    return allocate(
+        field_rate - pilot_rate,
+        DISPOSITION.get(year, {}) if year is not None else {},
+        base,
+        field_provenance,
+        GHAWAR[field_year].sources,
+    )
 
 
 def flows_by_year(horizon: datetime, growth_pct: float = 0.0) -> list[dict]:
@@ -683,15 +726,18 @@ def flows_by_year(horizon: datetime, growth_pct: float = 0.0) -> list[dict]:
                 "bbl_per_day": bbl,
                 "provenance": provenance,
                 "reference": HISTORY[year][2] if year in HISTORY else None,
+                "sources": INDIA[year].sources if year in INDIA else [],
                 "ghawar_bbl_per_day": field_bbl,
                 "ghawar_provenance": field_provenance,
                 "ghawar_reference": GHAWAR_HISTORY[year][2] if year in GHAWAR_HISTORY else None,
+                "ghawar_sources": GHAWAR[year].sources if year in GHAWAR else [],
                 "recipients": [
                     {
                         "recipient": share.recipient,
                         "bbl_per_day": share.bbl_per_day,
                         "provenance": share.provenance,
                         "reference": share.reference,
+                        "sources": share.sources,
                     }
                     for share in recipients_of(mid, growth_pct)
                 ],
@@ -747,7 +793,7 @@ def generate_pilot_events(
     transit = timedelta(hours=sea_lane_nm() / p["speed_knots"])
     load = timedelta(hours=p["load_hours"])
     discharge = timedelta(hours=p["discharge_hours"])
-    start = HISTORY_FROM
+    start = CARGO_FROM
     lane = "place:sea-lane-ras-tanura-sikka"
     yields = p["refinery_yields"]
 
@@ -764,8 +810,11 @@ def generate_pilot_events(
     events: list[dict] = []
     postings: list[dict] = []
 
+    context: dict = {"sources": []}
+
     def record(event_type: str, at: datetime, provenance: str, items: list, **attributes) -> str:
         event_id = uuid.uuid4().hex
+        attributes.setdefault("sources", context["sources"])
         check_balance([PostingInput(e, "mass", d, "kg") for e, d in items], conserved)
         events.append(
             {
@@ -795,7 +844,10 @@ def generate_pilot_events(
     k = 0
     while True:
         # The year of production decides the figure (and provenance) a cargo follows.
-        rate, provenance = flow_bbl_per_day(ready - timedelta(days=2), growth_pct)
+        produced_at = ready - timedelta(days=2)
+        rate, provenance = flow_bbl_per_day(produced_at, growth_pct)
+        route_year = min(max(produced_at.year, min(INDIA)), max(INDIA))
+        context["sources"] = INDIA[route_year].sources + sources("model-voyages")
         vessel = min(fleet, key=lambda v: v.free_at)
         load_at = max(ready, vessel.free_at)
         depart_at = load_at + load
@@ -903,7 +955,7 @@ def generate_pilot_events(
 
     # The rest of Ghawar's output leaves the field once a month (at the month's last noon),
     # one event per recipient.
-    month = start
+    month = HISTORY_FROM
     while True:
         following = datetime(month.year + month.month // 12, month.month % 12 + 1, 1, tzinfo=UTC)
         at = following - timedelta(hours=12)
@@ -920,6 +972,8 @@ def generate_pilot_events(
                 month=month.strftime("%Y-%m"),
                 recipient=share.recipient,
                 bbl_per_day=round(share.bbl_per_day),
+                note=share.reference,
+                sources=share.sources,
             )
         month = following
 

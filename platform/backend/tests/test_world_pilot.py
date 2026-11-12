@@ -114,12 +114,24 @@ def test_regeneration_is_idempotent(db):
     assert cargoes() * 10 - len(VESSELS) <= voyages <= cargoes() * 10
     # One extraction a month per recipient.
     assert offtakes(db) >= 12 * len(HISTORY)
+    # Every movement names its sources.
+    unsourced = db.scalar(
+        select(func.count())
+        .select_from(WorldEvent)
+        .where(
+            WorldEvent.run_id == RUN_ID,
+            func.jsonb_array_length(WorldEvent.attributes["sources"]) == 0,
+        )
+    )
+    assert unsourced == 0
     months = db.scalar(
         select(func.count(func.distinct(WorldEvent.attributes["month"].astext))).where(
             WorldEvent.run_id == RUN_ID, WorldEvent.attributes.has_key("month")
         )
     )
-    assert months == 12 * len(HISTORY)
+    from app.world_pilot import GHAWAR_HISTORY
+
+    assert months == 12 * len(GHAWAR_HISTORY)
 
 
 def test_history_years_follow_the_published_flows(db):
@@ -176,8 +188,13 @@ def test_ghawar_produces_its_whole_derived_output(db):
             )
         )
         assert kinds == {provenance}, year
-    # About a third of Saudi output: 2.8-3.4 mb/d.
-    assert all(2.8e6 < bbl < 3.4e6 for bbl, _, _ in GHAWAR_HISTORY.values())
+    # From 2019 about a third of Saudi output: 2.8-3.4 mb/d; the 1981 peak about 5.7 mb/d.
+    assert all(2.8e6 < bbl < 3.4e6 for y, (bbl, _, _) in GHAWAR_HISTORY.items() if y >= 2019)
+    assert GHAWAR_HISTORY[1981][0] == pytest.approx(5.7e6, rel=0.01)
+    # The reconstruction meets the published cumulative production (IEA: 66 bn bbl by 2007).
+    from app.world_history import cumulative_ghawar_bbl
+
+    assert cumulative_ghawar_bbl(1951, 2007) == pytest.approx(66e9, rel=0.05)
 
 
 def test_vessel_locations_do_not_overlap(db):
@@ -343,7 +360,8 @@ def test_recipients_take_the_rest_of_ghawar_output(db):
     for year in GHAWAR_HISTORY:
         shares = recipients_of(datetime(year, 6, 1, tzinfo=UTC))
         total = sum(share.bbl_per_day for share in shares)
-        assert total == pytest.approx(GHAWAR_HISTORY[year][0] - HISTORY[year][0]), year
+        pilot = HISTORY[year][0] if year in HISTORY else 0.0
+        assert total == pytest.approx(GHAWAR_HISTORY[year][0] - pilot), year
         assert all(share.bbl_per_day > 0 for share in shares)
         # Whatever no statistic places is shown as unknown, never dropped.
         assert sum(1 for share in shares if share.recipient == UNKNOWN) <= 1
@@ -354,7 +372,10 @@ def test_reserves_are_re_estimated_from_aramco_figures(db):
     from app.world_pilot import ARAMCO_RESERVES, ghawar_estimates
 
     estimates = ghawar_estimates()
-    assert set(estimates) == {y for y in ARAMCO_RESERVES if y >= 2018}
+    assert set(estimates) == {1950} | {y for y in ARAMCO_RESERVES if y >= 2018}
+    # Before production: the end-2018 reserves plus the production of 1951-2018.
+    assert estimates[1950][0] > 120e9
+    assert all(row[2]["sources"] for row in estimates.values())
     assert estimates[2018][0] == pytest.approx(48.25e9)
     later = [y for y in estimates if y > 2018]
     if not later:

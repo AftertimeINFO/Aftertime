@@ -4,7 +4,7 @@ export type BalanceLevel = "substance" | "molecular" | "element";
 export type BalanceColumn = "opening" | "inflow" | "outflow" | "transform" | "carrier" | "revision" | "closing" | "residual" | "internal";
 export type BalanceValues = Record<BalanceColumn, number>;
 
-export type BalanceBreakdown = { event_type: string } & Partial<Record<BalanceColumn, number>>;
+export type BalanceBreakdown = { event_type: string; sources?: { title: string; url?: string | null }[] } & Partial<Record<BalanceColumn, number>>;
 
 export type BalanceRow = {
   id: string;

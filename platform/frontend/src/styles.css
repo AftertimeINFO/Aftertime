@@ -1982,3 +1982,14 @@ pre {
 .report-tooltip { position: absolute; top: 8px; z-index: 2; display: grid; gap: 3px; min-width: 190px; padding: 8px 10px; color: #e7f0ec; background: #07110ef2; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; pointer-events: none; }
 .report-tooltip span { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; }
 .report-tooltip em { font-style: normal; font-variant-numeric: tabular-nums; }
+
+/* Sources behind a movement */
+.sources { position: relative; display: inline-block; margin-left: 10px; }
+.sources-badge { height: 18px; padding: 0 6px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; font-size: 10px; letter-spacing: 0.02em; }
+.sources-badge:hover, .sources-badge[aria-expanded="true"] { color: var(--layer); border-color: var(--layer); }
+.sources-pop { position: absolute; z-index: 40; top: 22px; left: 0; display: block; width: min(520px, 70vw); max-height: 320px; overflow: auto; padding: 8px 10px; background: var(--panel); border: 1px solid var(--layer); border-radius: 6px; box-shadow: 0 12px 30px #000c; white-space: normal; }
+.sources-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #c8d6d0; font-size: 12px; line-height: 1.4; text-align: left; }
+.sources-list a { color: var(--cyan); text-decoration: none; }
+.sources-list a:hover { text-decoration: underline; }
+.report-sources { margin-top: 14px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.report-sources h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #c8d6d0; }
