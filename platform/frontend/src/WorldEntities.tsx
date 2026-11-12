@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { request } from "./api";
 import EntityCard from "./EntityCard";
+import { PaneContext, replaceTabQuery, tabParams } from "./tabs";
 import type { EntityList, EntityListItem } from "./worldModel";
 
 const PAGE = 200;
 
-function readParam(name: string): string | null {
-  return new URLSearchParams(window.location.search).get(name);
-}
-
 /** Browser of every entity in the world model with the entity card on the right. */
 export default function WorldEntities() {
+  const pane = useContext(PaneContext);
+  const [initial] = useState(() => tabParams(pane));
+  const readParam = (name: string) => initial.get(name);
   const [query, setQuery] = useState(readParam("q") || "");
   const [kind, setKind] = useState(readParam("kind") || "");
   const [list, setList] = useState<EntityList | null>(null);
@@ -36,9 +36,8 @@ export default function WorldEntities() {
     if (selected) params.set("id", selected);
     if (query.trim()) params.set("q", query.trim());
     if (kind) params.set("kind", kind);
-    const search = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-  }, [selected, query, kind]);
+    replaceTabQuery(pane, params);
+  }, [pane, selected, query, kind]);
 
   const loadMore = async () => {
     const params = new URLSearchParams({ limit: String(PAGE), offset: String(items.length) });

@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from "react";
+import { useContext, useMemo, useSyncExternalStore } from "react";
+import { PaneContext, getTabs, setTabDefaults, updateTab, useTabs, type Tab } from "./tabs";
 
 /** Model layer: each one is a separate database on the API side. */
 export type LayerId = "dev" | "preprod" | "prod";
@@ -65,21 +66,44 @@ function persist(): void {
   window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
 }
 
-/** Update the context. A layer change reloads the page: every view refetches from the new database. */
-export function setContext(patch: Partial<AppContext>): void {
+/**
+ * Update the context. A layer change reloads the page: every view refetches from the new
+ * database. Scope and period belong to the active tab (and become the defaults of new tabs).
+ */
+export function setContext(patch: Partial<AppContext> & { scopeName?: string }): void {
   const layerChanged = patch.layer !== undefined && patch.layer !== state.layer;
-  state = { ...state, ...patch };
+  const { scopeName, ...rest } = patch;
+  state = { ...state, ...rest };
+  setTabDefaults({ scope: state.scope, from: state.from, to: state.to });
   if (typeof window === "undefined") return;
   persist();
   if (layerChanged) {
     window.location.reload();
     return;
   }
+  const active = getTabs().active;
+  if (active) {
+    const tabPatch: Partial<Tab> = {};
+    if (rest.scope !== undefined) {
+      tabPatch.scope = rest.scope;
+      tabPatch.scopeName = scopeName;
+    } else if (scopeName !== undefined) tabPatch.scopeName = scopeName;
+    if (rest.from !== undefined) tabPatch.from = rest.from;
+    if (rest.to !== undefined) tabPatch.to = rest.to;
+    if (Object.keys(tabPatch).length) updateTab(active, tabPatch);
+  }
   listeners.forEach((listener) => listener());
 }
 
+/** Scope and period of a tab, falling back to the window-wide defaults. */
+export function contextOf(base: AppContext, tab: Tab | undefined): AppContext {
+  if (!tab) return base;
+  return { layer: base.layer, scope: tab.scope ?? base.scope, from: tab.from ?? base.from, to: tab.to ?? base.to };
+}
+
+/** Context of the tab the caller is rendered in, or of the active tab (top bar). */
 export function useAppContext(): AppContext {
-  return useSyncExternalStore(
+  const base = useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -87,6 +111,11 @@ export function useAppContext(): AppContext {
     getContext,
     getContext,
   );
+  const pane = useContext(PaneContext);
+  const { tabs, active } = useTabs();
+  const tab = tabs.find((t) => t.id === (pane ?? active));
+  const scope = tab?.scope, from = tab?.from, to = tab?.to;
+  return useMemo(() => contextOf(base, tab), [base, scope, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** Link to another page that keeps the current layer in the URL. */

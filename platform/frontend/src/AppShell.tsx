@@ -1,40 +1,52 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { request } from "./api";
 import { hrefWithLayer, quarterPeriod, setContext, useAppContext, yearPeriod, type LayerId } from "./appContext";
 import { firstScope, scopePath, searchScopes, type ScopeNode, type ScopeTree } from "./balance";
 import { clampPeriod, coveredYears, periodCovered, useCoverage } from "./coverage";
+import { TabPage } from "./pages";
+import { HOME, PaneContext, activateTab, closeTab, openTab, openUrl, tabTitle, updateTab, useTabs, type Tab, type TabKind } from "./tabs";
 import VersionBadge from "./VersionBadge";
 
 type LayerInfo = { id: LayerId; label: string; description: string; capabilities: string[]; available: boolean };
 
-type NavItem = { href: string; label: string; glyph: string; match: (path: string) => boolean; needs?: string[]; children?: NavItem[] };
+type NavItem = { kind: TabKind; label: string; glyph: string; needs?: string[]; children?: NavItem[] };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Баланс матерії", glyph: "Σ", match: (p) => p === "/" || p === "/balance", needs: ["balance"] },
+  { kind: "balance", label: "Баланс матерії", glyph: "Σ", needs: ["balance"] },
   {
-    href: "/world",
+    kind: "world",
     label: "Світ",
     glyph: "◍",
-    match: (p) => p.startsWith("/world"),
     needs: ["world"],
     children: [
-      { href: "/world", label: "Програвання", glyph: "", match: (p) => p === "/world" || p === "/world/" },
-      { href: "/world/entities", label: "Сутності", glyph: "", match: (p) => p.startsWith("/world/entities") },
+      { kind: "world", label: "Програвання", glyph: "" },
+      { kind: "entities", label: "Сутності", glyph: "" },
     ],
   },
-  { href: "/lab", label: "Моделі", glyph: "⌬", match: (p) => p.startsWith("/lab"), needs: ["lab.edit", "lab.run"] },
+  { kind: "lab", label: "Моделі", glyph: "⌬", needs: ["lab.edit", "lab.run"] },
   // Open in every layer: the page explains when a layer cannot compute.
-  { href: "/compute", label: "Розрахунок світу", glyph: "◷", match: (p) => p.startsWith("/compute") },
+  { kind: "compute", label: "Розрахунок світу", glyph: "◷" },
   // Open in every layer: PROD shows where its models came from.
-  { href: "/promote", label: "Випуск моделей", glyph: "⇪", match: (p) => p.startsWith("/promote") },
+  { kind: "promote", label: "Випуск моделей", glyph: "⇪" },
 ];
 
+const GLYPH: Record<TabKind, string> = { balance: "Σ", world: "◍", entities: "◍", lab: "⌬", compute: "◷", promote: "⇪" };
 const RAIL_KEY = "aftertime.rail";
+const EARTH = { scope: "place:earth", scopeName: "Earth" };
 
-/** Common frame of every page: layer, scope and period on top, sections on the left. */
-/** usesScope: the page reads scope and period; usesPeriod: the page reads the period only. */
-export default function AppShell({ children, usesScope = false, usesPeriod = false }: { children: ReactNode; usesScope?: boolean; usesPeriod?: boolean }) {
+/** Open a page from the menu: the general balance always in a new tab, other pages focused. */
+function openFromMenu(kind: TabKind): void {
+  openTab(kind === "balance" ? { kind, ...EARTH } : { kind });
+}
+
+/**
+ * Common frame: layer, scope and period on top, sections on the left, and the open pages
+ * as tabs. Scope and period in the top bar belong to the active tab.
+ */
+export default function AppShell() {
   const context = useAppContext();
+  const { tabs, active } = useTabs();
+  const activeTab = tabs.find((t) => t.id === active) ?? null;
   const [layers, setLayers] = useState<LayerInfo[]>([]);
   const [narrow, setNarrow] = useState(() => {
     try {
@@ -43,12 +55,34 @@ export default function AppShell({ children, usesScope = false, usesPeriod = fal
       return false;
     }
   });
+  // Pages are mounted on first view and kept while their tab is open.
+  const [mounted, setMounted] = useState<Set<string>>(() => new Set(active ? [active] : []));
+  useEffect(() => {
+    setMounted((current) => {
+      const open = new Set(tabs.map((t) => t.id));
+      const next = new Set([...current].filter((id) => open.has(id)));
+      if (active) next.add(active);
+      return next.size === current.size && [...next].every((id) => current.has(id)) ? current : next;
+    });
+  }, [tabs, active]);
   useEffect(() => {
     request<{ items: LayerInfo[] }>("/layers").then((r) => setLayers(r.items)).catch(() => setLayers([]));
   }, []);
+  // In-app links open in tabs instead of reloading the window.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as HTMLElement | null)?.closest?.("a");
+      if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
+      const href = anchor.getAttribute("href");
+      if (!href || !href.startsWith("/") || href.startsWith("//") || href.startsWith("/api")) return;
+      if (openUrl(href)) event.preventDefault();
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
   const current = layers.find((l) => l.id === context.layer);
   const capabilities = new Set(current?.capabilities ?? ["balance", "world", "lab.edit", "lab.run"]);
-  const path = window.location.pathname;
   const toggleRail = () => {
     setNarrow((value) => {
       try {
@@ -59,11 +93,19 @@ export default function AppShell({ children, usesScope = false, usesPeriod = fal
       return !value;
     });
   };
+  const kind = activeTab?.kind;
 
   return (
     <div className={`shell ${narrow ? "shell-narrow" : ""}`} data-layer={context.layer}>
       <header className="shell-top">
-        <a className="shell-brand" href={hrefWithLayer("/")}>
+        <a
+          className="shell-brand"
+          href={hrefWithLayer("/")}
+          onClick={(e) => {
+            e.preventDefault();
+            openFromMenu("balance");
+          }}
+        >
           <i />
           <span>
             <b>AFTERTIME</b>
@@ -71,8 +113,8 @@ export default function AppShell({ children, usesScope = false, usesPeriod = fal
           </span>
         </a>
         <LayerSwitch layers={layers} active={context.layer} />
-        <ScopePicker active={usesScope} />
-        <PeriodPicker active={usesScope || usesPeriod} />
+        <ScopePicker active={kind === "balance"} tab={activeTab} />
+        <PeriodPicker active={kind === "balance" || kind === "world"} />
         <div className="shell-top-right">
           <VersionBadge />
         </div>
@@ -80,20 +122,38 @@ export default function AppShell({ children, usesScope = false, usesPeriod = fal
       <nav className="shell-rail" aria-label="Головне меню">
         {NAV.map((item) => {
           const allowed = !item.needs || item.needs.some((need) => capabilities.has(need));
-          const active = item.match(path);
+          const isActive = kind === item.kind || !!item.children?.some((c) => c.kind === kind);
           return (
-            <div key={item.href} className="shell-rail-group">
+            <div key={item.label} className="shell-rail-group">
               <a
-                className={`shell-rail-item ${active ? "active" : ""} ${allowed ? "" : "blocked"}`}
-                href={allowed ? hrefWithLayer(item.href) : undefined}
-                title={allowed ? item.label : `${item.label}: недоступно в шарі ${current?.label ?? context.layer}`}
+                className={`shell-rail-item ${isActive ? "active" : ""} ${allowed ? "" : "blocked"}`}
+                href={allowed ? hrefWithLayer(HOME[item.kind]) : undefined}
+                title={
+                  !allowed
+                    ? `${item.label}: недоступно в шарі ${current?.label ?? context.layer}`
+                    : item.kind === "balance"
+                      ? "Відкрити загальний баланс у новій вкладці"
+                      : item.label
+                }
                 aria-disabled={!allowed}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (allowed) openFromMenu(item.kind);
+                }}
               >
                 <span className="shell-glyph" aria-hidden="true">{item.glyph}</span>
                 <span className="shell-label">{item.label}</span>
               </a>
-              {active && allowed && !narrow && item.children?.map((child) => (
-                <a key={child.href} className={`shell-rail-sub ${child.match(path) ? "active" : ""}`} href={hrefWithLayer(child.href)}>
+              {isActive && allowed && !narrow && item.children?.map((child) => (
+                <a
+                  key={child.label}
+                  className={`shell-rail-sub ${child.kind === kind ? "active" : ""}`}
+                  href={hrefWithLayer(HOME[child.kind])}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openFromMenu(child.kind);
+                  }}
+                >
                   {child.label}
                 </a>
               ))}
@@ -104,7 +164,65 @@ export default function AppShell({ children, usesScope = false, usesPeriod = fal
           {narrow ? "»" : "«"}
         </button>
       </nav>
-      <div className="shell-content">{children}</div>
+      <div className="shell-content">
+        <TabBar tabs={tabs} active={active} />
+        <div className="shell-panes">
+          {tabs.filter((t) => mounted.has(t.id)).map((tab) => (
+            <PaneContext.Provider key={`${tab.id}:${tab.rev}`} value={tab.id}>
+              <div className={`shell-pane ${tab.id === active ? "" : "inactive"}`} aria-hidden={tab.id !== active}>
+                <TabPage kind={tab.kind} />
+              </div>
+            </PaneContext.Provider>
+          ))}
+          {!tabs.length && (
+            <div className="shell-empty">Усі вкладки закрито. Оберіть розділ у меню ліворуч, щоб відкрити його у вкладці.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TabBar({ tabs, active }: { tabs: Tab[]; active: string | null }) {
+  const strip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    strip.current?.querySelector<HTMLElement>(".shell-tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
+  if (!tabs.length) return null;
+  return (
+    <div className="shell-tabs" role="tablist" aria-label="Відкриті вкладки" ref={strip}>
+      {tabs.map((tab) => {
+        const title = tabTitle(tab);
+        return (
+          <div
+            key={tab.id}
+            role="tab"
+            aria-selected={tab.id === active}
+            className={`shell-tab kind-${tab.kind} ${tab.id === active ? "active" : ""}`}
+            title={title}
+            onClick={() => activateTab(tab.id)}
+            onAuxClick={(e) => {
+              if (e.button === 1) {
+                e.preventDefault();
+                closeTab(tab.id);
+              }
+            }}
+          >
+            <span className="shell-tab-glyph" aria-hidden="true">{GLYPH[tab.kind]}</span>
+            <span className="shell-tab-title">{title}</span>
+            <button
+              className="shell-tab-close"
+              aria-label={`Закрити: ${title}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                closeTab(tab.id);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -133,7 +251,7 @@ function LayerSwitch({ layers, active }: { layers: LayerInfo[]; active: LayerId 
   );
 }
 
-function ScopePicker({ active }: { active: boolean }) {
+function ScopePicker({ active, tab }: { active: boolean; tab: Tab | null }) {
   const context = useAppContext();
   const [tree, setTree] = useState<ScopeTree | null>(null);
   const [open, setOpen] = useState(false);
@@ -145,13 +263,20 @@ function ScopePicker({ active }: { active: boolean }) {
     request<ScopeTree>("/world/scopes").then(setTree).catch(() => setTree({ axes: [] }));
   }, []);
   const found = useMemo(() => scopePath(tree, context.scope), [tree, context.scope]);
+  // An object opened from its card may lie outside the scope tree (a vessel): keep it.
+  const outside = !!tab?.scopeName && tab.scope === context.scope;
   useEffect(() => {
     // A scope from another layer may not exist here: fall back to the first root.
-    if (tree && !found) {
+    if (tree && !found && !outside) {
       const fallback = firstScope(tree);
       if (fallback && fallback !== context.scope) setContext({ scope: fallback });
     }
-  }, [tree, found, context.scope]);
+  }, [tree, found, context.scope, outside]);
+  // The tab title follows the scope.
+  const foundName = found?.path[found.path.length - 1]?.name;
+  useEffect(() => {
+    if (active && tab && foundName && tab.scopeName !== foundName && tab.scope === context.scope) updateTab(tab.id, { scopeName: foundName });
+  }, [active, tab, foundName, context.scope]);
   useEffect(() => {
     if (found) setAxis(found.axis.id);
   }, [found]);
@@ -167,8 +292,8 @@ function ScopePicker({ active }: { active: boolean }) {
   const empty = tree !== null && !tree.axes.some((a) => a.roots.length);
   const currentAxis = tree?.axes.find((a) => a.id === axis);
   const matches = currentAxis && query.trim() ? searchScopes(currentAxis, query) : null;
-  const choose = (id: string) => {
-    setContext({ scope: id });
+  const choose = (id: string, name?: string) => {
+    setContext({ scope: id, scopeName: name });
     setOpen(false);
     setQuery("");
   };
@@ -185,6 +310,8 @@ function ScopePicker({ active }: { active: boolean }) {
               {node.name}
             </span>
           ))
+        ) : outside ? (
+          <span className="scope-crumb-last">{tab?.scopeName}</span>
         ) : (
           <span className="scope-crumb-muted">…</span>
         )}
@@ -203,7 +330,7 @@ function ScopePicker({ active }: { active: boolean }) {
           <div className="scope-tree">
             {matches
               ? matches.map(({ node, path }) => (
-                  <button key={`${path.map((p) => p.id).join("/")}/${node.id}`} className={node.id === context.scope ? "active" : ""} onClick={() => choose(node.id)}>
+                  <button key={`${path.map((p) => p.id).join("/")}/${node.id}`} className={node.id === context.scope ? "active" : ""} onClick={() => choose(node.id, node.name)}>
                     <b>{node.name}</b>
                     <span>{path.map((p) => p.name).join(" › ") || "корінь"}</span>
                   </button>
@@ -217,11 +344,11 @@ function ScopePicker({ active }: { active: boolean }) {
   );
 }
 
-function ScopeBranch({ node, depth, active, choose, trail }: { node: ScopeNode; depth: number; active: string; choose: (id: string) => void; trail: string }) {
+function ScopeBranch({ node, depth, active, choose, trail }: { node: ScopeNode; depth: number; active: string; choose: (id: string, name?: string) => void; trail: string }) {
   const key = `${trail}/${node.id}`;
   return (
     <>
-      <button key={key} className={`scope-node kind-${node.kind} ${node.id === active ? "active" : ""}`} style={{ paddingLeft: 10 + depth * 14 }} onClick={() => choose(node.id)}>
+      <button key={key} className={`scope-node kind-${node.kind} ${node.id === active ? "active" : ""}`} style={{ paddingLeft: 10 + depth * 14 }} onClick={() => choose(node.id, node.name)}>
         <b>{node.name}</b>
         <span>{KIND_LABEL[node.kind] ?? node.kind}</span>
       </button>

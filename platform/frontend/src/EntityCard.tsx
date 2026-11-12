@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { request } from "./api";
+import { hrefWithLayer } from "./appContext";
+import { openTab } from "./tabs";
 import { formatMass, scientific, type EntityCardData, type Operation, type Operations, type RelationRow } from "./worldModel";
 
 const PREDICATES: Record<string, string> = {
@@ -21,6 +23,8 @@ const PREDICATES: Record<string, string> = {
   connected_to: "під'єднано до",
 };
 const MIN_INTERVAL_MS = 500;
+/** Kinds of entities that hold matter and can be the scope of a balance. */
+const BALANCE_KINDS = new Set(["place", "asset", "actor"]);
 
 const dateTime = (iso: string) => new Date(iso).toLocaleString("uk-UA", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -99,7 +103,22 @@ export default function EntityCard({ id, at, onOpen, showPlay }: Props) {
         <code>{entity.id}</code>
         {types.length > 0 && <div className="entity-chips">{types.map((t) => <button key={t.entity_id} onClick={() => onOpen(t.entity_id)}>{t.name}</button>)}</div>}
         {entity.description && <p>{entity.description}</p>}
-        {showPlay && card.runs.length > 0 && <a className="entity-play" href={playHref}>▶ Відкрити у програванні</a>}
+        <div className="entity-actions">
+          {BALANCE_KINDS.has(entity.kind) && (
+            <a
+              className="entity-balance"
+              href={hrefWithLayer(`/?scope=${encodeURIComponent(entity.id)}`)}
+              title="Відкрити баланс матерії цього об'єкта в новій вкладці"
+              onClick={(e) => {
+                e.preventDefault();
+                openTab({ kind: "balance", scope: entity.id, scopeName: entity.name });
+              }}
+            >
+              Σ Баланс об'єкта
+            </a>
+          )}
+          {showPlay && card.runs.length > 0 && <a className="entity-play" href={playHref}>▶ Відкрити у програванні</a>}
+        </div>
       </header>
 
       <section>

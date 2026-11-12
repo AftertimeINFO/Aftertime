@@ -1734,7 +1734,7 @@ pre {
 .shell-rail-toggle { margin-top: auto; height: 28px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
 .shell-narrow .shell-label { display: none; }
 .shell-narrow .shell-rail-item { justify-content: center; padding: 0; }
-.shell-content { min-width: 0; min-height: 0; overflow: auto; }
+.shell-content { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .shell-loading { padding: 24px; color: var(--muted); }
 .shell-content .app-shell { height: 100%; min-height: 804px; }
 .shell-content .world-shell { height: 100%; }
@@ -1894,3 +1894,22 @@ pre {
 .tone-forecast { color: #b48cf2; }
 .tone-assumed { color: var(--muted); }
 @media (max-width: 1100px) { .compute-body { grid-template-columns: minmax(0, 1fr); } }
+
+/* Workspace tabs under the top bar; inactive pages stay mounted and keep their size */
+.shell-tabs { flex: none; display: flex; gap: 2px; height: 34px; padding: 4px 8px 0; overflow-x: auto; overflow-y: hidden; background: #091512; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+.shell-tab { flex: none; display: flex; align-items: center; gap: 7px; max-width: 260px; height: 30px; padding: 0 6px 0 11px; color: #9fb1aa; background: #0b1814; border: 1px solid var(--line); border-bottom: 0; border-radius: 6px 6px 0 0; font-size: 12px; cursor: pointer; user-select: none; }
+.shell-tab:hover { color: #e7f0ec; background: #10211b; }
+.shell-tab.active { color: #e7f0ec; background: #07110e; border-color: var(--layer); box-shadow: inset 0 2px 0 var(--layer); }
+.shell-tab-glyph { color: var(--layer); font-size: 11px; }
+.shell-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-tab-close { width: 18px; height: 18px; padding: 0; color: var(--muted); background: transparent; border: 0; border-radius: 3px; font-size: 14px; line-height: 1; cursor: pointer; }
+.shell-tab-close:hover { color: #07110e; background: var(--red); }
+.shell-panes { position: relative; flex: 1; min-height: 0; }
+.shell-pane { position: absolute; inset: 0; overflow: auto; }
+.shell-pane.inactive { visibility: hidden; pointer-events: none; z-index: -1; }
+.shell-pane.inactive * { visibility: hidden !important; }
+.shell-empty { padding: 32px; color: var(--muted); font-size: 13px; }
+.entity-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.entity-actions .entity-play { margin-top: 0; }
+.entity-balance { display: inline-block; padding: 6px 12px; color: var(--layer, var(--signal)); border: 1px solid currentColor; border-radius: 4px; text-decoration: none; font-weight: 600; }
+.entity-balance:hover { color: #07110e; background: var(--layer, var(--signal)); }

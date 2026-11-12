@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { request } from "./api";
 import { periodBounds, useAppContext } from "./appContext";
+import { PaneContext, replaceTabQuery, tabParams } from "./tabs";
 import EntityCard from "./EntityCard";
 import { balancesAt, buildTimeline, lastIndexAt, vesselStates, type LedgerEvent, type LngLat, type PilotObject, type PilotPayload } from "./worldModel";
 
@@ -68,7 +69,8 @@ export default function WorldPlayback() {
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(3);
-  const initial = new URLSearchParams(window.location.search);
+  const pane = useContext(PaneContext);
+  const [initial] = useState(() => tabParams(pane));
   const [selected, setSelected] = useState<string | null>(initial.get("entity"));
   const [tab, setTab] = useState<Tab>(initial.get("entity") ? "card" : "overview");
   const [filter, setFilter] = useState("");
@@ -191,12 +193,11 @@ export default function WorldPlayback() {
 
   // Keep the selection in the address so a card can be shared or reopened.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = tabParams(pane);
     if (selected) params.set("entity", selected); else params.delete("entity");
     params.delete("t");
-    const search = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-  }, [selected]);
+    replaceTabQuery(pane, params);
+  }, [pane, selected]);
 
   if (error) return <div className="world-shell world-message">Не вдалося завантажити пілот: {error}</div>;
   if (!data || !model) return <div className="world-shell world-message">Завантаження пілоту…</div>;
