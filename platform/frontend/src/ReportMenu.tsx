@@ -63,7 +63,7 @@ export function useLongPressMenu() {
   return { open, close: () => setOpen(null), bind };
 }
 
-export function ReportMenu({ open, close, onChoose }: { open: Open | null; close: () => void; onChoose: (kind: "turnover" | "chart", target: ReportTarget) => void }) {
+export function ReportMenu({ open, close, onChoose }: { open: Open | null; close: () => void; onChoose: (kind: "turnover" | "chart" | "movements", target: ReportTarget) => void }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -89,7 +89,7 @@ export function ReportMenu({ open, close, onChoose }: { open: Open | null; close
   // Keep the menu inside the window.
   const left = Math.min(open.x, window.innerWidth - 270);
   const top = Math.min(open.y, window.innerHeight - 150);
-  const choose = (kind: "turnover" | "chart") => {
+  const choose = (kind: "turnover" | "chart" | "movements") => {
     onChoose(kind, { row: open.row, flow: open.flow });
     close();
   };
@@ -104,6 +104,9 @@ export function ReportMenu({ open, close, onChoose }: { open: Open | null; close
       </button>
       <button role="menuitem" onClick={() => choose("chart")}>
         <span aria-hidden="true">↗</span> Графік
+      </button>
+      <button role="menuitem" onClick={() => choose("movements")}>
+        <span aria-hidden="true">⇄</span> Рухи
       </button>
     </div>
   );

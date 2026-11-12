@@ -1987,9 +1987,15 @@ pre {
 .sources { position: relative; display: inline-block; margin-left: 10px; }
 .sources-badge { height: 18px; padding: 0 6px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; font-size: 10px; letter-spacing: 0.02em; }
 .sources-badge:hover, .sources-badge[aria-expanded="true"] { color: var(--layer); border-color: var(--layer); }
-.sources-pop { position: absolute; z-index: 40; top: 22px; left: 0; display: block; width: min(520px, 70vw); max-height: 320px; overflow: auto; padding: 8px 10px; background: var(--panel); border: 1px solid var(--layer); border-radius: 6px; box-shadow: 0 12px 30px #000c; white-space: normal; }
+.sources-pop { position: fixed; z-index: 300; display: block; width: min(520px, 70vw); max-height: 220px; overflow: auto; padding: 8px 10px; background: var(--panel); border: 1px solid var(--layer); border-radius: 6px; box-shadow: 0 12px 30px #000c; white-space: normal; }
 .sources-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #c8d6d0; font-size: 12px; line-height: 1.4; text-align: left; }
 .sources-list a { color: var(--cyan); text-decoration: none; }
 .sources-list a:hover { text-decoration: underline; }
 .report-sources { margin-top: 14px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
 .report-sources h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #c8d6d0; }
+
+/* Movements report */
+.movements-table td.movement-at { white-space: nowrap; font-variant-numeric: tabular-nums; color: #c8d6d0; }
+.movements-table td .compute-tag { font-size: 10px; }
+.movements-more { margin-top: 12px; }
+.balance-controls .report-switch + .report-switch { margin-left: 8px; }

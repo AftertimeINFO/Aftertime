@@ -172,3 +172,26 @@ def test_series_refuses_too_many_points(db):
             db, "place:earth", datetime(2019, 1, 1, tzinfo=UTC), datetime(2040, 1, 1, tzinfo=UTC),
             "substance", "type:arab-light", "month",
         )
+
+
+def test_movements_add_up_to_the_balance(db):
+    from app.services.world_balance import movements
+
+    whole = balance(db, "place:ghawar", START, END, "substance")
+    crude = next(row for row in whole["rows"] if row["id"] == "type:arab-light")
+    journal = movements(db, "place:ghawar", START, END, "type:arab-light", limit=1000)
+    assert journal["total"] > 12
+    for column in ("outflow", "revision"):
+        assert close(journal["totals"][column], crude["values"][column], scale=1e9), column
+    first = journal["rows"][0]
+    assert first["at"] <= journal["rows"][-1]["at"]
+    assert all(row["sources"] for row in journal["rows"] if row["column"] == "outflow")
+
+    # One flow of the breakdown, and a group row (Crude oil) holding Arab Light.
+    flow = "Видобуток → Abqaiq processing and storage"
+    only = movements(db, "place:ghawar", START, END, "type:arab-light", flow, limit=1000)
+    expected = next(row for row in crude["breakdown"] if row["event_type"] == flow)["outflow"]
+    assert close(only["totals"]["outflow"], expected, scale=1e9)
+    assert {row["movement"] for row in only["rows"]} == {flow}
+    group = movements(db, "place:ghawar", START, END, crude["parent"], limit=5)
+    assert group["total"] == journal["total"] and len(group["rows"]) == 5

@@ -94,6 +94,9 @@ export default function ReportPage({ kind }: { kind: ReportKind }) {
   const shownUnit = unit ?? (data ? unitFor(data.points) : "Mt");
   const unitLabel = MASS_UNITS.find((u) => u.id === shownUnit)?.label ?? shownUnit;
   const other: ReportKind = kind === "chart" ? "turnover" : "chart";
+  // Movements of the row (or flow), for the whole period or one sub-period.
+  const openMovements = (from = context.from, to = context.to) =>
+    openTab({ kind: "movements", scope: context.scope, scopeName: tab?.scopeName, from, to, url: reportUrl("movements", { id: row, name }, level, flow) });
   const openOther = () =>
     openTab({ kind: other, scope: context.scope, scopeName: tab?.scopeName, from: context.from, to: context.to, url: reportUrl(other, { id: row, name }, level, flow) });
 
@@ -130,6 +133,9 @@ export default function ReportPage({ kind }: { kind: ReportKind }) {
           <button className="report-switch" onClick={openOther}>
             {other === "chart" ? "↗ Графік" : "≡ Оборотна відомість"}
           </button>
+          <button className="report-switch" onClick={() => openMovements()}>
+            ⇄ Рухи
+          </button>
           <label className="balance-unit">
             Одиниці
             <select value={shownUnit} onChange={(e) => setUnit(e.target.value as MassUnit)}>
@@ -145,7 +151,7 @@ export default function ReportPage({ kind }: { kind: ReportKind }) {
       {data && (
         <div className={loading ? "loading" : ""}>
           {kind === "turnover" ? (
-            <TurnoverTable data={data} unit={shownUnit} unitLabel={unitLabel} />
+            <TurnoverTable data={data} unit={shownUnit} unitLabel={unitLabel} onPeriod={openMovements} />
           ) : (
             <Charts data={data} unit={shownUnit} unitLabel={unitLabel} />
           )}
@@ -176,7 +182,14 @@ function shownColumns(data: Series): BalanceColumn[] {
   return moved.length ? moved : ["outflow"];
 }
 
-function TurnoverTable({ data, unit, unitLabel }: { data: Series; unit: MassUnit; unitLabel: string }) {
+/** Inclusive calendar dates of a sub-period from its bounds (the end bound is exclusive). */
+function pointPeriod(point: SeriesPoint): [string, string] {
+  const end = new Date(point.to);
+  end.setUTCDate(end.getUTCDate() - 1);
+  return [point.from.slice(0, 10), end.toISOString().slice(0, 10)];
+}
+
+function TurnoverTable({ data, unit, unitLabel, onPeriod }: { data: Series; unit: MassUnit; unitLabel: string; onPeriod: (from: string, to: string) => void }) {
   const columns = shownColumns(data);
   const signed = (column: BalanceColumn) => !!COLUMNS.find((c) => c.id === column)?.signed;
   return (
@@ -192,7 +205,7 @@ function TurnoverTable({ data, unit, unitLabel }: { data: Series; unit: MassUnit
         </thead>
         <tbody>
           {data.points.map((point) => (
-            <tr key={point.from} className="leaf">
+            <tr key={point.from} className="leaf has-detail" title="Клік — рухи за цей підперіод" onClick={() => onPeriod(...pointPeriod(point))}>
               <td className="balance-name">{pointLabel(point.from, data.step)}</td>
               {columns.map((column) => (
                 <td key={column} className={`col-${column} ${point.values[column] < 0 ? "neg" : ""}`}>

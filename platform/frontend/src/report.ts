@@ -1,7 +1,7 @@
 import type { BalanceColumn, BalanceLevel, BalanceValues } from "./balance";
 
 /** Reports built from one balance row: a turnover statement and a chart, by sub-period. */
-export type ReportKind = "turnover" | "chart";
+export type ReportKind = "turnover" | "chart" | "movements";
 export type ReportStep = "month" | "quarter" | "year";
 
 export type SeriesPoint = { from: string; to: string; values: BalanceValues };

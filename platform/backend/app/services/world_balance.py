@@ -96,12 +96,19 @@ def _ledger(
     materials: dict[str, str],
     index: ScopeIndex,
     edges: list[datetime] | None = None,
+    journal: list | None = None,
 ) -> tuple[dict, dict, dict]:
     """Flows per material, breakdown per material and event type, provenance turnover.
 
     With ``edges`` (sub-period starts, the first equal to ``start``) flows and breakdown
-    are returned per sub-period: lists indexed like ``edges``.
+    are returned per sub-period: lists indexed like ``edges``. With ``journal`` every
+    amount is also appended to it as a movement (see ``movements``).
     """
+
+    def log(moment, event_id, key, material, column, amount, prov, sources) -> None:
+        if journal is not None and amount:
+            journal.append((moment, event_id, key, material, column, amount, prov, sources))
+
     edges = edges or [start]
     portions = list(materials)
     base = {row["id"]: row["kg"] for row in portion_amounts(db, portions, start)}
@@ -182,7 +189,12 @@ def _ledger(
                     flows[materials[portion]]["revision"] += change
                     entry = breakdown[materials[portion]][(REVISION, "", None)]
                     entry["revision"] += change
-                    _note(entry, evidence.get("sources") or _evidence_source(evidence))
+                    refs = evidence.get("sources") or _evidence_source(evidence)
+                    _note(entry, refs)
+                    log(
+                        moment, None, (REVISION, "", None), materials[portion], "revision",
+                        change, evidence.get("provenance", "derived"), refs,
+                    )
             continue
         if kind == 0:
             for carrier in moved_at[moment]:
@@ -197,6 +209,10 @@ def _ledger(
                     flows[materials[portion]]["carrier"] += sign * amount
                     breakdown[materials[portion]][(CARRIER, "", None)]["carrier"] += (
                         sign * amount
+                    )
+                    log(
+                        moment, None, (CARRIER, "", carrier), materials[portion], "carrier",
+                        sign * amount, "assumed", [],
                     )
             continue
 
@@ -227,6 +243,7 @@ def _ledger(
                 entry = breakdown[material][(type_name, arrow, other)]
                 entry[column] += abs(delta)
                 _note(entry, sources)
+                log(moment, event_id, (type_name, arrow, other), material, column, abs(delta), prov, sources)
             continue
         net: dict[str, float] = defaultdict(float)
         for entity, delta in inside:
@@ -237,6 +254,7 @@ def _ledger(
                 entry = breakdown[material][(type_name, "", None)]
                 entry["transform"] += delta
                 _note(entry, sources)
+                log(moment, event_id, (type_name, "", None), material, "transform", delta, prov, sources)
         else:
             material = next(iter(net))
             turnover = sum(delta for _, delta in inside if delta > 0)
@@ -244,6 +262,7 @@ def _ledger(
             entry = breakdown[material][(type_name, "", None)]
             entry["internal"] += turnover
             _note(entry, sources)
+            log(moment, event_id, (type_name, "", None), material, "internal", turnover, prov, sources)
     labelled = [_label_breakdown(db, breakdown) for breakdown in breakdown_at]
     if len(edges) == 1:
         return flows_at[0], labelled[0], provenance
@@ -671,4 +690,121 @@ def balance_series(
         "points": points,
         "totals": totals,
         "sources": list(sources.values()),
+    }
+
+
+MOVEMENT_COLUMNS = ("inflow", "outflow", "transform", "carrier", "revision", "internal")
+MAX_MOVEMENTS = 1000
+
+
+def _material_parents(db: Session) -> dict[str, str]:
+    parent: dict[str, str] = {}
+    for subject, obj in db.execute(
+        text("SELECT subject_id, object_id FROM relations WHERE predicate = 'subclass_of'")
+    ):
+        parent.setdefault(subject, obj)
+    return parent
+
+
+def _under(material: str, row_id: str, parent: dict[str, str]) -> bool:
+    """True when ``material`` is the balance row ``row_id`` or lies below it."""
+    if row_id.endswith("#own"):
+        return material == row_id[: -len("#own")]
+    seen = set()
+    node = material
+    while node and node not in seen:
+        if node == row_id:
+            return True
+        seen.add(node)
+        node = parent.get(node)
+    return False
+
+
+def movements(
+    db: Session,
+    scope_id: str,
+    start: datetime,
+    end: datetime,
+    row_id: str | None = None,
+    flow: str | None = None,
+    offset: int = 0,
+    limit: int = 200,
+) -> dict:
+    """Movements that make up a balance: one line per event and material, in time order.
+
+    The same classification as the balance (inflow, outflow, transform, carrier,
+    revision, internal), optionally only for one balance row (a material or a group of
+    them) and one flow of its breakdown.
+    """
+    if end <= start:
+        raise BalanceError("Кінець періоду має бути пізніше за початок")
+    try:
+        roots = scope_roots(db, scope_id)
+    except LookupError as exc:
+        raise BalanceError(f"Невідомий scope {scope_id!r}") from exc
+    limit = max(1, min(limit, MAX_MOVEMENTS))
+    index = ScopeIndex(db, roots)
+    materials = _portion_materials(db)
+    journal: list = []
+    _ledger(db, start, end, materials, index, journal=journal)
+
+    parent = _material_parents(db)
+    keys = {entry[2] for entry in journal}
+    portions = {key[2] for key in keys if key[2]}
+    holders: dict[str, str] = {}
+    if portions:
+        for row in db.execute(
+            text(
+                """
+                SELECT p.id, COALESCE(h.name, p.attributes->>'holder', p.name) AS holder
+                FROM entities p
+                LEFT JOIN entities h ON h.id = p.attributes->>'holder'
+                WHERE p.id = ANY(:ids)
+                """
+            ),
+            {"ids": list(portions)},
+        ):
+            holders[row.id] = row.holder
+    names = _names(db, {entry[3] for entry in journal})
+
+    def label(key: tuple) -> str:
+        name, arrow, other = key
+        if name == CARRIER and other:
+            return f"{CARRIER}: {holders.get(other, other)}"
+        return f"{name} {arrow} {holders.get(other, other)}" if other and arrow else name
+
+    rows = []
+    totals = dict.fromkeys(MOVEMENT_COLUMNS, 0.0)
+    for moment, event_id, key, material, column, amount, prov, sources in journal:
+        if row_id and not _under(material, row_id, parent):
+            continue
+        text_label = label(key)
+        if flow and text_label != flow:
+            continue
+        totals[column] += amount
+        rows.append(
+            {
+                "at": moment.isoformat(),
+                "event": event_id,
+                "movement": text_label,
+                "material": material,
+                "material_name": names.get(material, {}).get("name", material),
+                "column": column,
+                "amount": amount,
+                "provenance": prov,
+                "sources": sources or [],
+            }
+        )
+    return {
+        "scope": scope_id,
+        "scope_name": _names(db, {scope_id}).get(scope_id, {}).get("name", scope_id),
+        "row": row_id,
+        "flow": flow,
+        "period": {"from": start.isoformat(), "to": end.isoformat()},
+        "unit": "kg",
+        "total": len(rows),
+        "offset": offset,
+        "limit": limit,
+        "totals": totals,
+        "rows": rows[offset : offset + limit],
     }

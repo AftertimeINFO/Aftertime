@@ -60,3 +60,15 @@ describe("axis labels", () => {
     expect(tickLabels([0, 0.5e9, 1e9], 1e9)).toEqual(["0,0", "0,5", "1,0"]);
   });
 });
+
+describe("movements tabs", () => {
+  it("open from the menu without a row and from a report with its row and flow", () => {
+    let state = openIn(empty, { kind: "movements", scope: "place:earth", scopeName: "Earth" }, "a");
+    const url = reportUrl("movements", { id: "type:arab-light", name: "Arab Light" }, "substance", "Видобуток → China");
+    state = openIn(state, { kind: "movements", url, scope: "place:ghawar", scopeName: "Ghawar field" }, "b");
+    expect(kindOfPath(url)).toBe("movements");
+    expect(state.tabs).toHaveLength(2);
+    expect(tabTitle(state.tabs[0])).toBe("Рухи · Earth");
+    expect(tabTitle(state.tabs[1])).toBe("Рухи · Arab Light · Видобуток → China · Ghawar field");
+  });
+});

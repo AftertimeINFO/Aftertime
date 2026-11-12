@@ -12,7 +12,7 @@ from app import __version__
 from app.db import get_db
 from app.layers import LAYER_POLICY, current_layer
 from app.models import Entity, EntityExtent, Observation, Posting, Relation, Source, WorldEvent
-from app.services.world_balance import BalanceError, balance, balance_series
+from app.services.world_balance import BalanceError, balance, balance_series, movements
 from app.services.world_compute import ComputeError, check_period, compute, coverage, overview
 from app.services.world_query import FAR_FUTURE, contents, operations, runs_of
 from app.services.world_scope import scope_tree
@@ -387,6 +387,29 @@ def material_balance_series(
     try:
         check_period(db, _moment(start), _moment(end))
         result = balance_series(db, scope, _moment(start), _moment(end), level, row, step, flow)
+    except BalanceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ComputeError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    result["coverage"] = coverage(db)
+    return result
+
+
+@router.get("/balance/movements")
+def material_movements(
+    scope: str,
+    start: datetime = Query(alias="from"),
+    end: datetime = Query(alias="to"),
+    row: str | None = None,
+    flow: str | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Movements (events) that make up a balance, optionally of one row and one flow."""
+    try:
+        check_period(db, _moment(start), _moment(end))
+        result = movements(db, scope, _moment(start), _moment(end), row, flow, offset, limit)
     except BalanceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ComputeError as exc:

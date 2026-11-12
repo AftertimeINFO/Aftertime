@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { request } from "./api";
 import { hrefWithLayer, setContext, useAppContext, type LayerId } from "./appContext";
 import { TabPage } from "./pages";
-import { HOME, PaneContext, activateTab, closeTab, openTab, openUrl, tabTitle, useTabs, type Tab, type TabKind } from "./tabs";
+import { HOME, PaneContext, SCOPED, activateTab, closeTab, getTabs, openTab, openUrl, tabTitle, useTabs, type Tab, type TabKind } from "./tabs";
 import VersionBadge from "./VersionBadge";
 
 type LayerInfo = { id: LayerId; label: string; description: string; capabilities: string[]; available: boolean };
@@ -11,6 +11,7 @@ type NavItem = { kind: TabKind; label: string; glyph: string; needs?: string[]; 
 
 const NAV: NavItem[] = [
   { kind: "balance", label: "Баланс матерії", glyph: "Σ", needs: ["balance"] },
+  { kind: "movements", label: "Рухи", glyph: "⇄", needs: ["balance"] },
   {
     kind: "world",
     label: "Світ",
@@ -28,12 +29,20 @@ const NAV: NavItem[] = [
   { kind: "promote", label: "Випуск моделей", glyph: "⇪" },
 ];
 
-const GLYPH: Record<TabKind, string> = { balance: "Σ", turnover: "≡", chart: "↗", world: "◍", entities: "◍", lab: "⌬", compute: "◷", promote: "⇪" };
+const GLYPH: Record<TabKind, string> = { balance: "Σ", turnover: "≡", chart: "↗", movements: "⇄", world: "◍", entities: "◍", lab: "⌬", compute: "◷", promote: "⇪" };
 const RAIL_KEY = "aftertime.rail";
 const EARTH = { scope: "place:earth", scopeName: "Earth" };
 
 /** Open a page from the menu: the general balance always in a new tab, other pages focused. */
 function openFromMenu(kind: TabKind): void {
+  if (kind === "movements") {
+    // Movements of the scope and period of the active report, else of the whole Earth.
+    const { tabs, active } = getTabs();
+    const current = tabs.find((t) => t.id === active);
+    const scoped = current && SCOPED.has(current.kind) ? { scope: current.scope, scopeName: current.scopeName } : EARTH;
+    openTab({ kind, ...scoped });
+    return;
+  }
   openTab(kind === "balance" ? { kind, ...EARTH } : { kind });
 }
 
@@ -130,6 +139,8 @@ export default function AppShell() {
                     ? `${item.label}: недоступно в шарі ${current?.label ?? context.layer}`
                     : item.kind === "balance"
                       ? "Відкрити загальний баланс у новій вкладці"
+                      : item.kind === "movements"
+                        ? "Рухи, що формують баланс: scope і період активної вкладки, у новій вкладці"
                       : item.label
                 }
                 aria-disabled={!allowed}

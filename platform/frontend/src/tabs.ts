@@ -8,7 +8,7 @@ import { createContext, useContext, useSyncExternalStore } from "react";
  * page has one tab that is focused again. The tabs survive reloads (localStorage); the
  * address bar always shows the active tab, so a link to it can be shared.
  */
-export type TabKind = "balance" | "turnover" | "chart" | "world" | "entities" | "lab" | "compute" | "promote";
+export type TabKind = "balance" | "turnover" | "chart" | "movements" | "world" | "entities" | "lab" | "compute" | "promote";
 
 export type Tab = {
   id: string;
@@ -26,9 +26,9 @@ export type Tab = {
 
 export type TabsState = { tabs: Tab[]; active: string | null };
 
-export const MULTI: ReadonlySet<TabKind> = new Set(["balance", "turnover", "chart"]);
+export const MULTI: ReadonlySet<TabKind> = new Set(["balance", "turnover", "chart", "movements"]);
 /** Pages that report on a scope and keep it (with the period) in the tab. */
-export const SCOPED: ReadonlySet<TabKind> = new Set(["balance", "turnover", "chart"]);
+export const SCOPED: ReadonlySet<TabKind> = new Set(["balance", "turnover", "chart", "movements"]);
 const STORAGE_KEY = "aftertime.tabs";
 const MAX_TABS = 24;
 
@@ -38,6 +38,7 @@ export function kindOfPath(path: string): TabKind | null {
   if (clean === "/" || clean === "/balance") return "balance";
   if (clean === "/report/turnover") return "turnover";
   if (clean === "/report/chart") return "chart";
+  if (clean === "/report/movements") return "movements";
   if (clean.startsWith("/world/entities")) return "entities";
   if (clean === "/world" || clean.startsWith("/world/")) return "world";
   if (clean.startsWith("/lab")) return "lab";
@@ -50,6 +51,7 @@ export const HOME: Record<TabKind, string> = {
   balance: "/",
   turnover: "/report/turnover",
   chart: "/report/chart",
+  movements: "/report/movements",
   world: "/world",
   entities: "/world/entities",
   lab: "/lab",
@@ -71,10 +73,12 @@ export function tabTitle(tab: Tab): string {
     case "balance":
       return `Баланс · ${tab.scopeName || tab.scope || "Earth"}`;
     case "turnover":
-    case "chart": {
+    case "chart":
+    case "movements": {
       const query = new URLSearchParams(tab.url.split("?")[1] || "");
       const subject = [query.get("name") || query.get("row"), query.get("flow")].filter(Boolean).join(" · ");
-      return `${tab.kind === "chart" ? "Графік" : "Обороти"} · ${subject} · ${tab.scopeName || tab.scope || "Earth"}`;
+      const kind = tab.kind === "chart" ? "Графік" : tab.kind === "turnover" ? "Обороти" : "Рухи";
+      return [kind, subject, tab.scopeName || tab.scope || "Earth"].filter(Boolean).join(" · ");
     }
     case "world":
       return "Світ · програвання";

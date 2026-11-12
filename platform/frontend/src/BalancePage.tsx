@@ -43,7 +43,7 @@ export default function BalancePage() {
   const tab = usePaneTab();
   // Press and hold a row: turnover statement or chart of that row (or flow) in a new tab.
   const menu = useLongPressMenu();
-  const openReport = (kind: "turnover" | "chart", target: ReportTarget) =>
+  const openReport = (kind: "turnover" | "chart" | "movements", target: ReportTarget) =>
     openTab({
       kind,
       scope: context.scope,
@@ -159,7 +159,7 @@ export default function BalancePage() {
               {coverage.forecast ? ` · прогноз після ${dateLabel(coverage.history_to)}` : ""}
             </a>
           )}
-          <span className="balance-note">Маса, {MASS_UNITS.find((u) => u.id === shownUnit)?.label}. Внутрішні переміщення в межах scope в сальдо не впливають. Утримуйте кнопку миші на рядку — оборотна відомість чи графік.</span>
+          <span className="balance-note">Маса, {MASS_UNITS.find((u) => u.id === shownUnit)?.label}. Внутрішні переміщення в межах scope в сальдо не впливають. Утримуйте кнопку миші на рядку — оборотна відомість, графік чи рухи.</span>
         </div>
       )}
 
