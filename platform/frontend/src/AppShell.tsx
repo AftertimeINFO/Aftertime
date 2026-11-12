@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { request } from "./api";
-import { hrefWithLayer, quarterPeriod, setContext, useAppContext, yearPeriod, type LayerId } from "./appContext";
-import { clampPeriod, coveredYears, periodCovered, useCoverage } from "./coverage";
+import { hrefWithLayer, setContext, useAppContext, type LayerId } from "./appContext";
 import { TabPage } from "./pages";
 import { HOME, PaneContext, activateTab, closeTab, openTab, openUrl, tabTitle, useTabs, type Tab, type TabKind } from "./tabs";
 import VersionBadge from "./VersionBadge";
@@ -113,7 +112,6 @@ export default function AppShell() {
         </a>
         <LayerSwitch layers={layers} active={context.layer} />
         <div className="shell-top-spacer" />
-        <PeriodPicker active={kind === "balance" || kind === "world"} />
         <div className="shell-top-right">
           <VersionBadge />
         </div>
@@ -246,57 +244,6 @@ function LayerSwitch({ layers, active }: { layers: LayerInfo[]; active: LayerId 
           {!layer.available && <em>!</em>}
         </button>
       ))}
-    </div>
-  );
-}
-
-function PeriodPicker({ active }: { active: boolean }) {
-  const context = useAppContext();
-  const covered = useCoverage();
-  const coverage = covered.overview?.coverage ?? null;
-  const ready = covered.status === "ready";
-  // A period without a computation is moved inside the coverage (balance pages only).
-  useEffect(() => {
-    if (!active || !ready || !coverage || periodCovered(context.from, context.to, coverage)) return;
-    const next = clampPeriod(context.from, context.to, coverage);
-    if (next) setContext(next);
-  }, [active, ready, coverage, context.from, context.to]);
-
-  const presets = coveredYears(coverage).flatMap((year) => [
-    { id: `${year}`, label: `${year} рік`, ...yearPeriod(year) },
-    ...([1, 2, 3, 4] as const).map((q) => ({ id: `${year}-q${q}`, label: `${year} · Q${q}`, ...quarterPeriod(year, q) })),
-  ]).filter((p) => periodCovered(p.from, p.to, coverage));
-  const preset = presets.find((p) => p.from === context.from && p.to === context.to)?.id ?? "";
-  const locked = ready && !coverage;
-  const title = !active
-    ? "Період застосовується до балансу матерії та програвання світу"
-    : locked
-      ? "У шарі ще немає розрахунку світу: період недоступний"
-      : coverage
-        ? `Доступно ${coverage.from} — ${coverage.to}${coverage.forecast ? ` (прогноз після ${coverage.history_to})` : ""}`
-        : "";
-  return (
-    <div className={`period-picker ${active ? "" : "inactive"} ${locked ? "locked" : ""}`} title={title}>
-      <small>
-        ПЕРІОД
-        <a href={hrefWithLayer("/compute")} className={`period-coverage ${coverage?.forecast ? "forecast" : ""}`} title="Налаштувати горизонт розрахунку">
-          {locked ? "немає розрахунку" : coverage ? `розраховано до ${coverage.to.split("-").reverse().join(".")}` : "…"}
-        </a>
-      </small>
-      <div>
-        <select aria-label="Готовий період" value={preset} disabled={!coverage} onChange={(e) => {
-          const chosen = presets.find((p) => p.id === e.target.value);
-          if (chosen) setContext({ from: chosen.from, to: chosen.to });
-        }}>
-          <option value="">довільний</option>
-          {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
-        <input type="date" aria-label="Початок періоду" value={context.from} disabled={!coverage} min={coverage?.from} max={context.to}
-          onChange={(e) => periodCovered(e.target.value, context.to, coverage) && setContext({ from: e.target.value })} />
-        <span>—</span>
-        <input type="date" aria-label="Кінець періоду" value={context.to} disabled={!coverage} min={context.from} max={coverage?.to}
-          onChange={(e) => periodCovered(context.from, e.target.value, coverage) && setContext({ to: e.target.value })} />
-      </div>
     </div>
   );
 }

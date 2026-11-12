@@ -1686,7 +1686,7 @@ pre {
 .shell[data-layer="preprod"] { --layer: var(--amber); }
 .shell[data-layer="prod"] { --layer: var(--cyan); }
 .shell-narrow { grid-template-columns: 56px minmax(0, 1fr); }
-.shell-top { grid-column: 1 / -1; display: grid; grid-template-columns: 172px auto minmax(120px, 1fr) auto auto; gap: 18px; align-items: center; padding: 0 16px; border-bottom: 2px solid var(--layer); background: #091512; }
+.shell-top { grid-column: 1 / -1; display: grid; grid-template-columns: 172px auto minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 0 16px; border-bottom: 2px solid var(--layer); background: #091512; }
 .shell-brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
 .shell-brand > i { width: 26px; height: 26px; flex: none; border: 1px solid var(--layer); border-radius: 50%; box-shadow: inset 0 0 0 6px #091512, inset 0 0 0 7px var(--layer); }
 .shell-brand b { display: block; font-size: 13px; letter-spacing: 0.18em; }
@@ -1701,7 +1701,6 @@ pre {
 .layer-switch button[data-layer="prod"].active { color: #07110e; background: var(--cyan); }
 .layer-switch em { position: absolute; top: 2px; right: 4px; color: var(--red); font-style: normal; font-size: 10px; }
 .scope-picker { position: relative; min-width: 0; }
-.scope-picker.inactive, .period-picker.inactive { opacity: 0.55; }
 .scope-current { display: flex; align-items: center; gap: 4px; max-width: 100%; height: 30px; padding: 0 10px; color: #e7f0ec; background: #07110e; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; overflow: hidden; white-space: nowrap; }
 .scope-current:hover { border-color: var(--layer); }
 .scope-current:disabled { cursor: default; }
@@ -1710,7 +1709,10 @@ pre {
 .scope-crumb::after { content: "›"; margin-left: 4px; }
 .scope-crumb-last { font-weight: 600; font-size: 13px; }
 .scope-crumb-muted { color: var(--muted); font-size: 12px; }
-.balance-scope { margin-top: 10px; display: grid; gap: 4px; min-width: 0; }
+.balance-context { margin-top: 10px; display: flex; align-items: flex-end; gap: 28px; flex-wrap: wrap; min-width: 0; }
+.balance-context .period-picker small { color: var(--muted); font-size: 10px; letter-spacing: 0.12em; }
+.world-top-right .period-picker small { color: var(--muted); font-size: 10px; letter-spacing: 0.12em; }
+.balance-scope { margin-top: 0; display: grid; gap: 4px; min-width: 0; }
 .balance-scope small { color: var(--muted); font-size: 10px; letter-spacing: 0.12em; }
 .balance-scope-line { display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; }
 .balance-scope-path { display: flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; overflow: hidden; }
@@ -1885,7 +1887,7 @@ pre {
 
 /* Narrow desktops: the top bar keeps layer, scope and period in one row without page scroll. */
 @media (max-width: 1280px) {
-  .shell-top { grid-template-columns: 30px auto minmax(120px, 1fr) auto auto; gap: 12px; }
+  .shell-top { grid-template-columns: 30px auto minmax(0, 1fr) auto; gap: 12px; }
   .shell-brand > span { display: none; }
   .period-picker input { width: 124px; padding: 0 4px; }
 }
@@ -1947,3 +1949,5 @@ pre {
 .entity-actions .entity-play { margin-top: 0; }
 .entity-balance { display: inline-block; padding: 6px 12px; color: var(--layer, var(--signal)); border: 1px solid currentColor; border-radius: 4px; text-decoration: none; font-weight: 600; }
 .entity-balance:hover { color: #07110e; background: var(--layer, var(--signal)); }
+.period-picker .period-year { width: 62px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.period-picker input.bad { border-color: var(--red, #e5484d); color: #ffb4b4; }

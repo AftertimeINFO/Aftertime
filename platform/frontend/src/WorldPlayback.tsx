@@ -6,6 +6,7 @@ import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { request } from "./api";
 import { periodBounds, useAppContext } from "./appContext";
 import { PaneContext, replaceTabQuery, tabParams } from "./tabs";
+import { PeriodPicker } from "./PeriodSelect";
 import EntityCard from "./EntityCard";
 import { balancesAt, buildTimeline, lastIndexAt, vesselStates, type LedgerEvent, type LngLat, type PilotObject, type PilotPayload } from "./worldModel";
 
@@ -256,6 +257,7 @@ export default function WorldPlayback() {
           <b>Arab Light: Гавар → Джамнагар, {windowLabel(data)}</b>
         </div>
         <div className="world-top-right">
+          <PeriodPicker />
           <a href="/world/entities" className="world-back">Усі сутності</a>
           <div className="world-clock">{date(t)} UTC</div>
         </div>
