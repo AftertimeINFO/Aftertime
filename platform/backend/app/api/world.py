@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session, aliased
 from app import __version__
 from app.db import get_db
 from app.models import Entity, EntityExtent, Observation, Posting, Relation, Source, WorldEvent
+from app.services.world_balance import BalanceError, balance
 from app.services.world_query import FAR_FUTURE, contents, operations, runs_of
+from app.services.world_scope import scope_tree
 from app.world_pilot import RUN_ID, SOURCE_ID, portion_id
 
 router = APIRouter(prefix="/api/v1/world")
@@ -310,3 +312,24 @@ def pilot_playback(db: Session = Depends(get_db)) -> dict:
             "evidence": estimate.evidence,
         },
     }
+
+
+@router.get("/scopes")
+def scopes(db: Session = Depends(get_db)) -> dict:
+    """Scope trees of both axes: geography (Earth to asset) and control (state to asset)."""
+    return scope_tree(db)
+
+
+@router.get("/balance")
+def material_balance(
+    scope: str,
+    start: datetime = Query(alias="from"),
+    end: datetime = Query(alias="to"),
+    level: str = "substance",
+    db: Session = Depends(get_db),
+) -> dict:
+    """Trial balance of matter for a scope and period, by level of matter."""
+    try:
+        return balance(db, scope, _moment(start), _moment(end), level)
+    except BalanceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

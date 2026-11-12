@@ -3,12 +3,13 @@ export type Row = Record<string, any>;
 export type PortContract = { key: string; name: string; direction: "input" | "output" | "bidirectional"; domain: string; role: string; quantity: string; unit: string; required: boolean; multiple: boolean; variables: Row[]; capabilities: string[] };
 export type Observable = { address: string; scope: "component" | "port" | "connection" | "system"; target_id: string; target_key: string; target_name: string; metric_key: string; name: string; unit: string; value_type: string; path: string; recording: string; aggregation: string };
 import type { EventAction, EventProgram } from "./eventDesigner";
+import { getContext, LAYER_HEADER } from "./appContext";
 export type Workspace = { project: Row; projects: Row[]; version: Row; models: Row[]; components: (Row & { ports: PortContract[] })[]; nodes: Row[]; edges: Row[]; scenarios: Row[]; resources: Row[]; runs: Row[]; scripts: Row[]; workflows: Row[]; metrics: Row[]; dashboards: Row[]; monitors: Row[]; event_types: Row[]; event_programs: EventProgram[]; observables: Observable[] };
 export async function request<T>(path: string, init?: RequestInit, timeoutMs = 20_000): Promise<T> {
   const timeout = AbortSignal.timeout(timeoutMs);
   let response: Response;
   try {
-    response = await fetch(`${API}${path}`, { ...init, signal: init?.signal || timeout, headers: { "Content-Type": "application/json", ...init?.headers } });
+    response = await fetch(`${API}${path}`, { ...init, signal: init?.signal || timeout, headers: { "Content-Type": "application/json", [LAYER_HEADER]: getContext().layer, ...init?.headers } });
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("Сервер не відповів за 20 секунд. Перевірте стан API/worker.");
     throw error;

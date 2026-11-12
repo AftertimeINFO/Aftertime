@@ -1,0 +1,124 @@
+"""Material balance and scopes over the Saudi Arabia to India pilot (DEV layer)."""
+
+from datetime import UTC, datetime
+
+import pytest
+
+from app.db import SessionLocal
+from app.services.world_balance import BalanceError, balance
+from app.services.world_scope import CONTROL_ROOT, scope_roots, scope_tree
+from app.world_pilot import generate_pilot_events, seed_pilot_world
+from app.world_core import seed_world_core
+
+START = datetime(2023, 1, 1, tzinfo=UTC)
+END = datetime(2024, 1, 1, tzinfo=UTC)
+FLOWS = ("opening", "inflow", "outflow", "transform", "carrier", "closing")
+
+
+@pytest.fixture(scope="module")
+def db():
+    with SessionLocal() as session:
+        seed_world_core(session)
+        seed_pilot_world(session)
+        generate_pilot_events(session)
+        try:
+            yield session
+        finally:
+            session.rollback()
+
+
+def leaves(result: dict) -> dict[str, dict]:
+    return {row["id"]: row["values"] for row in result["rows"] if not row["group"]}
+
+
+def close(a: float, b: float, scale: float = 1.0) -> bool:
+    return abs(a - b) <= 1e-6 * max(1.0, abs(a), abs(b), scale)
+
+
+@pytest.mark.parametrize(
+    "scope", ["place:earth", "place:saudi-arabia", "asset:jamnagar", "actor:reliance", CONTROL_ROOT]
+)
+def test_every_scope_balances(db, scope):
+    result = balance(db, scope, START, END, "substance")
+    assert not result["empty"]
+    assert result["residual_ok"], result["totals"]
+    for values in leaves(result).values():
+        explained = (
+            values["opening"]
+            + values["inflow"]
+            - values["outflow"]
+            + values["transform"]
+            + values["carrier"]
+        )
+        assert close(explained, values["closing"], values["opening"])
+
+
+def test_earth_is_closed_and_refining_conserves_mass(db):
+    totals = balance(db, "place:earth", START, END, "substance")["totals"]
+    assert totals["inflow"] == pytest.approx(0, abs=1e-3)
+    assert totals["outflow"] == pytest.approx(0, abs=1e-3)
+    assert totals["carrier"] == pytest.approx(0, abs=1e-3)
+    assert close(totals["transform"], 0.0, totals["opening"])
+
+
+def test_refinery_takes_crude_in_and_turns_it_into_products(db):
+    rows = leaves(balance(db, "asset:jamnagar", START, END, "substance"))
+    assert rows["type:arab-light"]["inflow"] > 0
+    assert rows["type:arab-light"]["transform"] < 0
+    for product in ("type:gasoline", "type:diesel", "type:jet-fuel", "type:fuel-oil"):
+        assert rows[product]["transform"] > 0
+        assert rows[product]["closing"] > 0
+
+
+def test_groups_are_subtotals_of_their_children(db):
+    result = balance(db, "place:earth", START, END, "substance")
+    by_id = {row["id"]: row for row in result["rows"]}
+    for row in result["rows"]:
+        if not row["group"]:
+            continue
+        kids = [r for r in result["rows"] if r["parent"] == row["id"]]
+        for column in FLOWS:
+            assert close(sum(k["values"][column] for k in kids), row["values"][column])
+    assert by_id["type:substance"]["group"]
+
+
+def test_company_scope_equals_its_assets(db):
+    company = balance(db, "actor:reliance", START, END, "substance")["totals"]
+    assert scope_roots(db, "actor:reliance") >= {"asset:jamnagar", "asset:sikka"}
+    refinery = balance(db, "asset:jamnagar", START, END, "substance")["totals"]
+    terminal = balance(db, "asset:sikka", START, END, "substance")["totals"]
+    assert close(company["closing"], refinery["closing"] + terminal["closing"])
+
+
+def test_country_exports_crude_with_its_carriers(db):
+    totals = balance(db, "place:saudi-arabia", START, END, "substance")["totals"]
+    assert totals["carrier"] < 0
+    assert totals["closing"] < totals["opening"]
+
+
+def test_element_level_keeps_the_total_mass(db):
+    substance = balance(db, "asset:jamnagar", START, END, "substance")["totals"]
+    element = balance(db, "asset:jamnagar", START, END, "element")
+    assert {row["symbol"] for row in element["rows"]} >= {"C", "H", "S"}
+    for column in FLOWS:
+        assert close(element["totals"][column], substance[column])
+        assert close(sum(row["values"][column] for row in element["rows"]), substance[column])
+
+
+def test_scope_tree_has_both_axes(db):
+    tree = scope_tree(db)
+    geo, control = tree["axes"]
+    assert geo["roots"][0]["id"] == "place:earth"
+    states = {node["id"]: node for node in control["roots"][0]["children"]}
+    assert "actor:india" in states
+    companies = {node["id"] for node in states["actor:india"]["children"]}
+    assert "actor:reliance" in companies
+
+
+def test_bad_requests_are_refused(db):
+    with pytest.raises(BalanceError):
+        balance(db, "place:earth", END, START, "substance")
+    with pytest.raises(BalanceError):
+        balance(db, "place:nowhere", START, END, "substance")
+    with pytest.raises(BalanceError):
+        balance(db, "place:earth", START, END, "quark")

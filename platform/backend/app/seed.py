@@ -1,11 +1,19 @@
 from datetime import UTC, datetime
 
-from app.db import SessionLocal
-from app.models import Entity, LabProject, ProcessModel, Relation, Route, Scenario, Source
+from app.db import layer_session
 from app.lab_seed import seed_model_lab
+from app.layers import DEFAULT_LAYER, Layer, parse_layer
+from app.models import Entity, LabProject, ProcessModel, Relation, Route, Scenario, Source
 from app.participant_catalog import seed_participant_process_pilots
 from app.world_core import seed_world_core
 from app.world_pilot import generate_pilot_events, seed_pilot_world
+
+# Layer the seed commands write to; set from --layer on the command line.
+SEED_LAYER: Layer = DEFAULT_LAYER
+
+
+def SessionLocal():  # noqa: N802 - keeps the call sites below unchanged
+    return layer_session(SEED_LAYER)
 
 ENTITIES = [
     ("ua", "state", "institutional", "Ukraine", "UA"),
@@ -203,6 +211,8 @@ def seed_world_pilot(*, force: bool = False) -> None:
 if __name__ == "__main__":
     import sys
 
+    if "--layer" in sys.argv:
+        SEED_LAYER = parse_layer(sys.argv[sys.argv.index("--layer") + 1])
     if "--world-pilot" in sys.argv:
         seed_world_pilot(force="--force" in sys.argv)
     elif "--world-core" in sys.argv:

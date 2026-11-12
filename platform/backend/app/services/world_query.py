@@ -44,17 +44,24 @@ def contained_ids(db: Session, entity_id: str, at: datetime) -> list[str]:
     return [row[0] for row in rows]
 
 
-def portion_amounts(db: Session, ids: list[str], at: datetime) -> list[dict]:
-    """Mass of every portion among ``ids`` at ``at``: estimate plus later postings."""
+def portion_amounts(
+    db: Session, ids: list[str], at: datetime, *, before: bool = False
+) -> list[dict]:
+    """Mass of every portion among ``ids`` at ``at``: estimate plus later postings.
+
+    With ``before`` the amount is taken just before ``at``: events and estimates at
+    exactly ``at`` are not applied yet.
+    """
     if not ids:
         return []
+    op = "<" if before else "<="
     query = text(
-        """
+        f"""
         WITH base AS (
             SELECT DISTINCT ON (subject_id) subject_id, value, valid_time
             FROM observations
             WHERE subject_id = ANY(:ids) AND property = 'mass' AND unit = 'kg'
-              AND valid_time <= :at
+              AND valid_time {op} :at
             ORDER BY subject_id, valid_time DESC
         ),
         moved AS (
@@ -62,7 +69,7 @@ def portion_amounts(db: Session, ids: list[str], at: datetime) -> list[dict]:
             FROM postings p
             JOIN events ev ON ev.id = p.event_id
             LEFT JOIN base b ON b.subject_id = p.entity_id
-            WHERE p.entity_id = ANY(:ids) AND p.property = 'mass' AND ev.occurred_at <= :at
+            WHERE p.entity_id = ANY(:ids) AND p.property = 'mass' AND ev.occurred_at {op} :at
               AND (b.valid_time IS NULL OR ev.occurred_at > b.valid_time)
             GROUP BY p.entity_id
         )

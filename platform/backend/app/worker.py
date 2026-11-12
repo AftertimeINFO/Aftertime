@@ -5,7 +5,8 @@ from redis import Redis
 from redis.exceptions import RedisError
 
 from app.config import settings
-from app.db import SessionLocal
+from app.db import layer_session
+from app.layers import split_queue_item
 from app.models import LabRun, SyncJob
 from app.services.model_lab import prepare_run, process_next
 from app.services.run_queue import SimulationQueueUnavailable, enqueue_simulation
@@ -27,9 +28,10 @@ def main() -> None:
             continue
         if not item:
             continue
-        queue, job_id = item
+        queue, raw_item = item
+        layer, job_id = split_queue_item(raw_item)
         if queue == "aftertime:simulation":
-            with SessionLocal() as db:
+            with layer_session(layer) as db:
                 run = db.get(LabRun, job_id)
                 if not run:
                     continue
@@ -61,7 +63,7 @@ def main() -> None:
                         if model_seconds:
                             desired_wall_seconds = model_seconds / max(step_speed, .001)
                             time.sleep(max(0, desired_wall_seconds - (time.perf_counter() - iteration_started)))
-                        enqueue_simulation(run.id)
+                        enqueue_simulation(run.id, layer)
                 except SimulationQueueUnavailable as exc:
                     logger.warning("simulation run %s is waiting for queue recovery", run.id)
                     run.status = "queue_waiting"; run.error = str(exc); db.commit()
@@ -69,7 +71,7 @@ def main() -> None:
                     logger.exception("simulation run %s failed", run.id)
                     run.status = "failed"; run.error = str(exc); db.commit()
             continue
-        with SessionLocal() as db:
+        with layer_session(layer) as db:
             job = db.get(SyncJob, job_id)
             if not job:
                 logger.warning("sync job %s no longer exists", job_id)

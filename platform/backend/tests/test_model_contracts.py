@@ -169,7 +169,7 @@ def test_rejected_emission_to_gas_connection_does_not_poison_model():
 
 def test_unavailable_simulation_queue_returns_retryable_503(monkeypatch):
     """Regression: a corrupted Redis AOF previously surfaced as an opaque HTTP 500."""
-    def unavailable(_run_id: str) -> None:
+    def unavailable(_run_id: str, _layer: str = "dev") -> None:
         raise SimulationQueueUnavailable("queue offline")
 
     monkeypatch.setattr("app.api.model_lab.enqueue_simulation", unavailable)

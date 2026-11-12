@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { request } from "./api";
-import VersionBadge from "./VersionBadge";
 import EntityCard from "./EntityCard";
 import type { EntityList, EntityListItem } from "./worldModel";
 
@@ -55,14 +54,12 @@ export default function WorldEntities() {
   return (
     <div className="world-shell entities-shell">
       <header className="world-top">
-        <a href="/" className="world-back">← Model Lab</a>
         <div>
           <small>МОДЕЛЬ СВІТУ · УСІ СУТНОСТІ</small>
           <b>Сутності {list ? `· ${list.total}` : ""}</b>
         </div>
         <div className="world-top-right">
           <a href="/world" className="world-back">▶ Програвання пілоту</a>
-          <VersionBadge />
         </div>
       </header>
       <div className="entities-body">

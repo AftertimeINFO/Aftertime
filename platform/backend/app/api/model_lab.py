@@ -6,12 +6,12 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, func, inspect, or_, select
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal, get_db
+from app.db import get_db, layer_session, request_layer, session_layer
 from app.qualification_cases import (
     QUALIFICATION_CASES,
     canonicalize_qualification_package,
@@ -131,7 +131,7 @@ def _replace_workflow_projection(
 
 def enqueue_run_or_503(db: Session, run: LabRun) -> None:
     try:
-        enqueue_simulation(run.id)
+        enqueue_simulation(run.id, session_layer(db))
     except SimulationQueueUnavailable as exc:
         run.status = "queue_waiting"
         run.error = (
@@ -2154,12 +2154,13 @@ def branch_run(run_id: str, body: dict[str, Any], db: Session = Depends(get_db))
 
 
 @router.get("/runs/{run_id}/stream")
-def stream(run_id: str):
+def stream(run_id: str, request: Request):
+    layer = request_layer(request)
     def events():
         import time
         previous = {}
         for _ in range(3600):
-            with SessionLocal() as db:
+            with layer_session(layer) as db:
                 run = db.get(LabRun, run_id)
                 if not run: break
                 latest_event = db.scalar(select(LabRunEvent).where(LabRunEvent.run_id == run_id, LabRunEvent.status == "processed").order_by(LabRunEvent.processed_at.desc()).limit(1))

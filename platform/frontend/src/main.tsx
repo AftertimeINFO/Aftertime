@@ -1,23 +1,38 @@
 import { StrictMode, Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App";
+import AppShell from "./AppShell";
+import BalancePage from "./BalancePage";
 import "./styles.css";
 
-// The world player pulls in MapLibre; load it only on /world.
+// Model Lab, the world player (MapLibre) and the entity browser load on demand.
+const App = lazy(() => import("./App"));
 const WorldPlayback = lazy(() => import("./WorldPlayback"));
 const WorldEntities = lazy(() => import("./WorldEntities"));
 
 const path = window.location.pathname;
+const loading = <div className="shell-loading">Завантаження…</div>;
 const page = path.startsWith("/world/entities") ? (
-  <Suspense fallback={null}>
-    <WorldEntities />
-  </Suspense>
+  <AppShell>
+    <Suspense fallback={loading}>
+      <WorldEntities />
+    </Suspense>
+  </AppShell>
 ) : path.startsWith("/world") ? (
-  <Suspense fallback={null}>
-    <WorldPlayback />
-  </Suspense>
+  <AppShell>
+    <Suspense fallback={loading}>
+      <WorldPlayback />
+    </Suspense>
+  </AppShell>
+) : path.startsWith("/lab") ? (
+  <AppShell>
+    <Suspense fallback={loading}>
+      <App />
+    </Suspense>
+  </AppShell>
 ) : (
-  <App />
+  <AppShell usesScope>
+    <BalancePage />
+  </AppShell>
 );
 
 createRoot(document.getElementById("root")!).render(<StrictMode>{page}</StrictMode>);

@@ -748,7 +748,7 @@ def before_start(ctx):
 
     scenario.configuration = {}
     db.commit()
-    monkeypatch.setattr("app.api.model_lab.enqueue_simulation", lambda _run_id: None)
+    monkeypatch.setattr("app.api.model_lab.enqueue_simulation", lambda _run_id, _layer="dev": None)
     non_scripted = start_run(
         {
             "model_version_id": event_model["version"].id,

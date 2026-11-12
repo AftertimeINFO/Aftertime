@@ -1,12 +1,10 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from redis import Redis
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.db import get_db
+from app.db import get_db, session_layer
 from app.models import (
     Entity,
     Observation,
@@ -18,6 +16,7 @@ from app.models import (
     SyncJob,
 )
 from app.schemas import AmmoniaSimulationRequest, SyncJobRequest
+from app.services.run_queue import enqueue_sync
 from app.services.simulation import simulate_ammonia
 
 router = APIRouter(prefix="/api/v1")
@@ -125,5 +124,5 @@ def create_sync_job(request: SyncJobRequest, db: Session = Depends(get_db)) -> d
     db.add(job)
     db.commit()
     db.refresh(job)
-    Redis.from_url(settings.redis_url, decode_responses=True).rpush("aftertime:sync", job.id)
+    enqueue_sync(job.id, session_layer(db))
     return {"id": job.id, "status": job.status.value}

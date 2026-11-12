@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { request } from "./api";
-import VersionBadge from "./VersionBadge";
 import EntityCard from "./EntityCard";
 import { balancesAt, buildTimeline, lastIndexAt, vesselStates, type LedgerEvent, type LngLat, type PilotObject, type PilotPayload } from "./worldModel";
 
@@ -212,14 +211,12 @@ export default function WorldPlayback() {
   return (
     <div className="world-shell">
       <header className="world-top">
-        <a href="/" className="world-back">← Model Lab</a>
         <div>
           <small>ПІЛОТ · БАЛАНС МАТЕРІЇ · НАБЛИЖЕННЯ</small>
           <b>Arab Light: Гавар → Джамнагар, {data.parameters.year}</b>
         </div>
         <div className="world-top-right">
           <a href="/world/entities" className="world-back">Усі сутності</a>
-          <VersionBadge />
           <div className="world-clock">{date(t)} UTC</div>
         </div>
       </header>
