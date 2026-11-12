@@ -6,7 +6,7 @@ vessels and portions as ordinary entities, a reserve estimate as an observation,
 and turns yearly flow figures (history, then a forecast) into a deterministic sequence
 of ledger events:
 
-    produce -> transfer -> load -> depart -> arrive -> discharge -> transfer -> transform
+    extract -> transfer -> load -> depart -> arrive -> discharge -> transfer -> transform
 
 Yearly volumes of Saudi crude delivered to India come from published trade figures
 (``HISTORY``, each with its reference); years after the history are a forecast. Timings,
@@ -717,7 +717,7 @@ def generate_pilot_events(
         # Cargo movements follow the yearly figure; voyage legs are timing assumptions.
         leg = "forecast" if provenance == "forecast" else "assumed"
         record(
-            "type:produce",
+            "type:extract",
             ready - timedelta(days=2),
             provenance,
             [(ghawar, -cargo_kg), (abqaiq, cargo_kg)],
@@ -821,7 +821,7 @@ def generate_pilot_events(
         other_kg = max(field_rate - pilot_rate, 0.0) * days * p["kg_per_bbl"]
         if other_kg > 0:
             record(
-                "type:produce",
+                "type:extract",
                 at,
                 field_provenance,
                 [(ghawar, -other_kg), (offtake, other_kg)],

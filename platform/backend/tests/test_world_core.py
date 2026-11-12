@@ -79,7 +79,7 @@ def test_production_and_transfer_keep_balance(db):
 
     record_event(
         db,
-        event_type_id="type:produce",
+        event_type_id="type:extract",
         occurred_at=T0,
         provenance="derived",
         postings=[kg(deposit, -3.0e8), kg(storage, 3.0e8)],

@@ -3,7 +3,7 @@ import { balancesAt, buildTimeline, lastIndexAt, pointAlong, vesselStates, type 
 
 const events: LedgerEvent[] = [
   { id: "2", t: "2023-01-02T00:00:00Z", type: "type:load", provenance: "derived", attributes: {}, postings: [["store", -10], ["ship", 10]] },
-  { id: "1", t: "2023-01-01T00:00:00Z", type: "type:produce", provenance: "derived", attributes: {}, postings: [["field", -10], ["store", 10]] },
+  { id: "1", t: "2023-01-01T00:00:00Z", type: "type:extract", provenance: "derived", attributes: {}, postings: [["field", -10], ["store", 10]] },
 ];
 
 describe("world playback", () => {

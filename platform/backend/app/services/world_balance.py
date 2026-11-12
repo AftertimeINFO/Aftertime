@@ -63,6 +63,19 @@ def _portion_materials(db: Session) -> dict[str, str]:
     return {row.id: row.material or UNKNOWN_MATERIAL for row in rows}
 
 
+# Names of event types in the breakdown of a balance row.
+EVENT_LABELS = {
+    "type:extract": "Видобуток",
+    "type:transfer": "Переміщення",
+    "type:load": "Завантаження",
+    "type:discharge": "Вивантаження",
+    "type:transform": "Переробка",
+    "type:depart": "Відхід",
+    "type:arrive": "Прибуття",
+}
+CARRIER = "Переміщення з носієм"
+
+
 def _ledger(
     db: Session, start: datetime, end: datetime, materials: dict[str, str], index: ScopeIndex
 ) -> tuple[dict, dict, dict]:
@@ -89,7 +102,11 @@ def _ledger(
         {"start": start, "end": end},
     ):
         postings_by_event[row.event_id].append((row.entity_id, float(row.delta)))
-        headers[row.event_id] = (row.occurred_at, row.provenance, row.type_name)
+        headers[row.event_id] = (
+            row.occurred_at,
+            row.provenance,
+            EVENT_LABELS.get(row.event_type_id, row.type_name),
+        )
 
     # Boundaries where a moving carrier changes container, with the carriers concerned.
     moved_at: dict[datetime, set[str]] = defaultdict(set)
@@ -125,7 +142,7 @@ def _ledger(
                         continue
                     sign = 1.0 if now else -1.0
                     flows[materials[portion]]["carrier"] += sign * amount
-                    breakdown[materials[portion]]["Переміщення з носієм"]["carrier"] += (
+                    breakdown[materials[portion]][(CARRIER, "", None)]["carrier"] += (
                         sign * amount
                     )
             continue
@@ -146,11 +163,15 @@ def _ledger(
         for _, delta in inside:
             provenance[prov] += abs(delta)
         if outside:
+            # One counterparty outside the scope names the direction of the flow.
+            counterparts = {entity for entity, _ in outside}
+            other = next(iter(counterparts)) if len(counterparts) == 1 else None
             for entity, delta in inside:
                 material = materials[entity]
                 column = "inflow" if delta > 0 else "outflow"
                 flows[material][column] += abs(delta)
-                breakdown[material][type_name][column] += abs(delta)
+                arrow = "←" if delta > 0 else "→"
+                breakdown[material][(type_name, arrow, other)][column] += abs(delta)
             continue
         net: dict[str, float] = defaultdict(float)
         for entity, delta in inside:
@@ -158,13 +179,41 @@ def _ledger(
         if len(net) > 1:
             for material, delta in net.items():
                 flows[material]["transform"] += delta
-                breakdown[material][type_name]["transform"] += delta
+                breakdown[material][(type_name, "", None)]["transform"] += delta
         else:
             material = next(iter(net))
             turnover = sum(delta for _, delta in inside if delta > 0)
             flows[material]["internal"] += turnover
-            breakdown[material][type_name]["internal"] += turnover
-    return flows, breakdown, provenance
+            breakdown[material][(type_name, "", None)]["internal"] += turnover
+    return flows, _label_breakdown(db, breakdown), provenance
+
+
+def _label_breakdown(db: Session, breakdown: dict) -> dict:
+    """Breakdown keyed by readable labels: "Видобуток → Abqaiq processing and storage"."""
+    portions = {other for by_key in breakdown.values() for (_, _, other) in by_key if other}
+    holders: dict[str, str] = {}
+    if portions:
+        for row in db.execute(
+            text(
+                """
+                SELECT p.id, COALESCE(h.name, p.attributes->>'holder', p.name) AS holder
+                FROM entities p
+                LEFT JOIN entities h ON h.id = p.attributes->>'holder'
+                WHERE p.id = ANY(:ids)
+                """
+            ),
+            {"ids": list(portions)},
+        ):
+            holders[row.id] = row.holder
+    labelled: dict[str, dict[str, dict[str, float]]] = {}
+    for material, by_key in breakdown.items():
+        rows: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        for (name, arrow, other), values in by_key.items():
+            label = f"{name} {arrow} {holders.get(other, other)}" if other else name
+            for column, amount in values.items():
+                rows[label][column] += amount
+        labelled[material] = rows
+    return labelled
 
 
 def _stock(

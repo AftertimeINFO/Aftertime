@@ -120,7 +120,7 @@ Thing
 ├─ Asset ─ Storage, Vessel, Pipeline segment, Terminal, Process unit
 ├─ Process            (transformation template)
 ├─ Actor ─ State, Company
-└─ Event type ─ Produce, Transfer, Load, Depart, Arrive, Discharge, Transform
+└─ Event type ─ Transfer (─ Extract, Load, Discharge), Depart, Arrive, Transform
 ```
 
 Знання рівня типу зберігаються як спостереження й відношення сутності-типу:

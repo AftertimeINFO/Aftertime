@@ -124,7 +124,7 @@ def test_history_years_follow_the_published_flows(db):
             .select_from(WorldEvent)
             .where(
                 WorldEvent.run_id == RUN_ID,
-                WorldEvent.event_type_id == "type:produce",
+                WorldEvent.event_type_id == "type:extract",
                 ~WorldEvent.attributes.has_key("month"),
                 WorldEvent.occurred_at >= start,
                 WorldEvent.occurred_at < end,
@@ -137,7 +137,7 @@ def test_history_years_follow_the_published_flows(db):
             db.scalars(
                 select(WorldEvent.provenance).where(
                     WorldEvent.run_id == RUN_ID,
-                    WorldEvent.event_type_id == "type:produce",
+                    WorldEvent.event_type_id == "type:extract",
                     ~WorldEvent.attributes.has_key("month"),
                     WorldEvent.occurred_at >= start + timedelta(days=5),
                     WorldEvent.occurred_at < end,

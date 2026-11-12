@@ -13,7 +13,7 @@ import { balancesAt, buildTimeline, lastIndexAt, vesselStates, type LedgerEvent,
 const DAY = 86_400_000;
 const SPEEDS = [0.5, 1, 3, 7, 14]; // simulated days per real second
 const EVENT_LABELS: Record<string, string> = {
-  "type:produce": "Видобуток",
+  "type:extract": "Видобуток",
   "type:transfer": "Перекачка",
   "type:load": "Завантаження",
   "type:depart": "Відхід",

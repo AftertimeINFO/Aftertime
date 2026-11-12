@@ -122,3 +122,19 @@ def test_bad_requests_are_refused(db):
         balance(db, "place:nowhere", START, END, "substance")
     with pytest.raises(BalanceError):
         balance(db, "place:earth", START, END, "quark")
+
+
+def test_extraction_is_broken_down_by_direction(db):
+    result = balance(db, "place:ghawar", START, END, "substance")
+    crude = next(row for row in result["rows"] if row["id"] == "type:arab-light")
+    labels = {row["event_type"]: row for row in crude["breakdown"]}
+    assert set(labels) == {
+        "Видобуток → Abqaiq processing and storage",
+        "Видобуток → Other Ghawar off-take (aggregate)",
+    }
+    out = sum(row["outflow"] for row in labels.values())
+    assert close(out, crude["values"]["outflow"])
+    # Most of Ghawar's crude goes elsewhere than the pilot route to India.
+    assert labels["Видобуток → Other Ghawar off-take (aggregate)"]["outflow"] > 2 * (
+        labels["Видобуток → Abqaiq processing and storage"]["outflow"]
+    )
