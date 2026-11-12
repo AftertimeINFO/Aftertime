@@ -16,7 +16,7 @@ from app.services.world_balance import BalanceError, balance, balance_series, mo
 from app.services.world_compute import ComputeError, check_period, compute, coverage, overview
 from app.services.world_query import FAR_FUTURE, contents, operations, runs_of
 from app.services.world_scope import scope_tree
-from app.world_pilot import RUN_ID, SOURCE_ID, portion_id
+from app.world_pilot import CARGO_FROM, RUN_ID, SOURCE_ID, portion_id
 
 router = APIRouter(prefix="/api/v1/world")
 
@@ -200,15 +200,18 @@ def pilot_playback(
 ) -> dict:
     """Everything the 2D player needs for the pilot run in a window of at most a year.
 
-    The window defaults to the first year of the computed coverage. ``initial`` holds the
+    The window defaults to the first year of the pilot route within the computed coverage. ``initial`` holds the
     net postings of every portion before the window, so the player starts from them.
     """
     source = db.get(Source, SOURCE_ID)
     if source is None:
         raise HTTPException(404, "Pilot run is not seeded")
     covered = coverage(db)
-    lo = _moment(start) if start else (
-        datetime.fromisoformat(covered["from"]).replace(tzinfo=UTC) if covered else datetime(2019, 1, 1, tzinfo=UTC)
+    # By default the first year of the route to India (the coverage starts earlier, with
+    # Ghawar's history, when no vessel sails yet).
+    lo = _moment(start) if start else max(
+        datetime.fromisoformat(covered["from"]).replace(tzinfo=UTC) if covered else CARGO_FROM,
+        CARGO_FROM,
     )
     hi = _moment(end) if end else lo + timedelta(days=366)
     hi = min(hi, lo + timedelta(days=366))
