@@ -1,0 +1,168 @@
+﻿{
+    "releaseTag":  "model-lab-v0.5.0-rc.1",
+    "testedAt":  "2026-11-12T14:33:40.1424590Z",
+    "commit":  "4309ab523c585bfba9ccaad0e83cad004edc72e8",
+    "architectureVersion":  2,
+    "observables":  61,
+    "eventTypes":  5,
+    "pilotQualification":  {
+                               "passed":  true,
+                               "passedCount":  15,
+                               "requiredCount":  15,
+                               "checksums":  [
+                                                 {
+                                                     "package":  "san-bruno-2010-l1",
+                                                     "checksum":  "54c8cc7a0d2182b5c5226a86208d6ecb1b01caa71ea0724dcb8dd48716d9a9ef"
+                                                 },
+                                                 {
+                                                     "package":  "northeast-blackout-2003-l1",
+                                                     "checksum":  "0bb762bb0d4f8f2459a992ec2393ab3c4dfcf2ae90c34a1a32dfd505097d5fea"
+                                                 },
+                                                 {
+                                                     "package":  "storm-arwen-2021-l1",
+                                                     "checksum":  "6633bcd9135a6b904d3ce47bdd4a2f24ab1558bc28943a9adef12a3482d483ba"
+                                                 },
+                                                 {
+                                                     "package":  "gb-power-outage-2019-l1",
+                                                     "checksum":  "79f823b65b7c9d3c119b2e0e36cb6cdaf9d2fb5d375ecb0a60c150fd65c4d2c1"
+                                                 },
+                                                 {
+                                                     "package":  "south-australia-black-system-2016-l1",
+                                                     "checksum":  "897efd868cc498e255377b68c0c6f10695398fbe6f24c6565334e57696a55bbb"
+                                                 },
+                                                 {
+                                                     "package":  "hokkaido-blackout-2018-l1",
+                                                     "checksum":  "8f435537cf21ba726e848aace48444b6140ce3ac0862e47a586b9816d211ef47"
+                                                 },
+                                                 {
+                                                     "package":  "southwest-blackout-2011-l1",
+                                                     "checksum":  "9d2957ec8de15f239042648be7ab0482e44b0953eb9f307ca71cc902f94aaca4"
+                                                 },
+                                                 {
+                                                     "package":  "india-grid-disturbances-2012-l1",
+                                                     "checksum":  "05025b7c4f22dc6f765a14c75c62d4ec232f7ea8cfa8a8988614058589076576"
+                                                 },
+                                                 {
+                                                     "package":  "texas-cold-weather-2021-l1",
+                                                     "checksum":  "7a41a447315070476175c58a43df3e21562c982304bc0817e299acfef6dc25d0"
+                                                 },
+                                                 {
+                                                     "package":  "iberian-blackout-2025-l1",
+                                                     "checksum":  "81207af839fe87c3be1bc1dcc96d9b80a7dc89f03a5ed170f63aa8b0ce2def96"
+                                                 },
+                                                 {
+                                                     "package":  "north-hyde-outage-2025-l1",
+                                                     "checksum":  "38dde15136ffde419ef551642e04fc95df155f37ef402acd55d33ab4acd17f89"
+                                                 },
+                                                 {
+                                                     "package":  "kleen-energy-explosion-2010-l1",
+                                                     "checksum":  "ccde793ea4c9d3face7495d89d5a895974596c215d4d408a29ecfd5478e580a3"
+                                                 },
+                                                 {
+                                                     "package":  "macondo-blowout-2010-l1",
+                                                     "checksum":  "8e1a901c1642784d5f99ead1f7842c87a26214b99588498e835eb485fe18dad4"
+                                                 },
+                                                 {
+                                                     "package":  "ukraine-moldova-incident-2026-l1",
+                                                     "checksum":  "6e67c5fd49179599d3eb66327b47297d1f8ef6ffc21ddc8d267deaf03669111d"
+                                                 },
+                                                 {
+                                                     "package":  "ukraine-energy-attacks-2022-2026-l1",
+                                                     "checksum":  "83e0357f54cc0d4693288c8e74981a1f138eb0ab899d2b4aa928d64359cdd528"
+                                                 }
+                                             ],
+                               "definitions":  [
+                                                   {
+                                                       "scenario":  "san-bruno-2010",
+                                                       "package":  "san-bruno-2010-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-san-bruno-2010"
+                                                   },
+                                                   {
+                                                       "scenario":  "northeast-2003",
+                                                       "package":  "northeast-blackout-2003-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-northeast-2003"
+                                                   },
+                                                   {
+                                                       "scenario":  "storm-arwen-2021",
+                                                       "package":  "storm-arwen-2021-l1",
+                                                       "revision":  3,
+                                                       "modelVersion":  "qualification-storm-arwen-2021"
+                                                   },
+                                                   {
+                                                       "scenario":  "gb-2019",
+                                                       "package":  "gb-power-outage-2019-l1",
+                                                       "revision":  3,
+                                                       "modelVersion":  "qualification-gb-2019"
+                                                   },
+                                                   {
+                                                       "scenario":  "south-australia-2016",
+                                                       "package":  "south-australia-black-system-2016-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-south-australia-2016"
+                                                   },
+                                                   {
+                                                       "scenario":  "hokkaido-2018",
+                                                       "package":  "hokkaido-blackout-2018-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-hokkaido-2018"
+                                                   },
+                                                   {
+                                                       "scenario":  "southwest-2011",
+                                                       "package":  "southwest-blackout-2011-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-southwest-2011"
+                                                   },
+                                                   {
+                                                       "scenario":  "india-2012",
+                                                       "package":  "india-grid-disturbances-2012-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-india-2012"
+                                                   },
+                                                   {
+                                                       "scenario":  "texas-2021",
+                                                       "package":  "texas-cold-weather-2021-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-texas-2021"
+                                                   },
+                                                   {
+                                                       "scenario":  "iberia-2025",
+                                                       "package":  "iberian-blackout-2025-l1",
+                                                       "revision":  3,
+                                                       "modelVersion":  "qualification-iberia-2025"
+                                                   },
+                                                   {
+                                                       "scenario":  "north-hyde-2025",
+                                                       "package":  "north-hyde-outage-2025-l1",
+                                                       "revision":  3,
+                                                       "modelVersion":  "qualification-north-hyde-2025"
+                                                   },
+                                                   {
+                                                       "scenario":  "kleen-energy",
+                                                       "package":  "kleen-energy-explosion-2010-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-kleen-energy"
+                                                   },
+                                                   {
+                                                       "scenario":  "macondo",
+                                                       "package":  "macondo-blowout-2010-l1",
+                                                       "revision":  3,
+                                                       "modelVersion":  "qualification-macondo"
+                                                   },
+                                                   {
+                                                       "scenario":  "ua-md-2026",
+                                                       "package":  "ukraine-moldova-incident-2026-l1",
+                                                       "revision":  3,
+                                                       "modelVersion":  "qualification-ua-md-2026"
+                                                   },
+                                                   {
+                                                       "scenario":  "ukraine-attacks",
+                                                       "package":  "ukraine-energy-attacks-2022-2026-l1",
+                                                       "revision":  2,
+                                                       "modelVersion":  "qualification-ukraine-attacks"
+                                                   }
+                                               ]
+                           },
+    "status":  "passed"
+}
