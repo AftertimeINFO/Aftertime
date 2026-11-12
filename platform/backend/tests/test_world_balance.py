@@ -49,6 +49,7 @@ def test_every_scope_balances(db, scope):
             - values["outflow"]
             + values["transform"]
             + values["carrier"]
+            + values["revision"]
         )
         assert close(explained, values["closing"], values["opening"])
 
@@ -125,19 +126,19 @@ def test_bad_requests_are_refused(db):
 
 
 def test_extraction_is_broken_down_by_direction(db):
+    from app.world_disposition import RECIPIENTS
+
     result = balance(db, "place:ghawar", START, END, "substance")
     crude = next(row for row in result["rows"] if row["id"] == "type:arab-light")
-    labels = {row["event_type"]: row for row in crude["breakdown"]}
-    assert set(labels) == {
-        "Видобуток → Abqaiq processing and storage",
-        "Видобуток → Other Ghawar off-take (aggregate)",
-    }
+    labels = {row["event_type"]: row for row in crude["breakdown"] if "outflow" in row}
+    pilot = "Видобуток → Abqaiq processing and storage"
+    names = {f"Видобуток → {name}" for _, name, *_ in RECIPIENTS}
+    assert pilot in labels
+    assert set(labels) - {pilot} <= names and len(labels) > 1
     out = sum(row["outflow"] for row in labels.values())
-    assert close(out, crude["values"]["outflow"])
+    assert close(out, crude["values"]["outflow"], scale=1e9)
     # Most of Ghawar's crude goes elsewhere than the pilot route to India.
-    assert labels["Видобуток → Other Ghawar off-take (aggregate)"]["outflow"] > 2 * (
-        labels["Видобуток → Abqaiq processing and storage"]["outflow"]
-    )
+    assert out > 3 * labels[pilot]["outflow"]
 
 
 def test_series_adds_up_to_the_balance_of_the_period(db):
@@ -155,7 +156,7 @@ def test_series_adds_up_to_the_balance_of_the_period(db):
     assert set(series["flows"]) == {row["event_type"] for row in crude["breakdown"]}
 
     # One flow of the breakdown, by quarter.
-    flow = "Видобуток → Other Ghawar off-take (aggregate)"
+    flow = "Видобуток → Abqaiq processing and storage"
     quarters = balance_series(
         db, "place:ghawar", START, END, "substance", "type:arab-light", "quarter", flow
     )

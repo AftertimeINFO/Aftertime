@@ -13,8 +13,10 @@ Yearly volumes of Saudi crude delivered to India come from published trade figur
 vessels and the single route are assumptions; every event carries its provenance.
 
 The rest of Ghawar's output (``GHAWAR_HISTORY``: Saudi crude output times Ghawar's share
-of Aramco's capacity) leaves the field monthly into one aggregate off-take, so the field
-balance shows its whole production, not only the cargoes of the pilot route.
+of Aramco's capacity) leaves the field monthly to the recipients of Saudi crude known from
+published statistics, and to "Unknown recipient" for the volumes no statistic places
+(see ``world_disposition``). Remaining reserves follow Aramco's reported crude and
+condensate reserves year by year (``ARAMCO_RESERVES``), as new estimates of the deposit.
 """
 
 import json
@@ -29,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.models import Entity, EntityExtent, Observation, Posting, Relation, Source, WorldEvent
 from app.services.world_ledger import PostingInput, check_balance, conserved_units
 from app.world_core import seed_world_core
+from app.world_disposition import RECIPIENTS, SAUDI_DISPOSITION, allocate, data_year
 
 RUN_ID = "pilot-saudi-india"
 LEGACY_RUN_IDS = ("pilot-saudi-india-2023",)
@@ -68,7 +71,22 @@ GHAWAR_HISTORY: dict[int, tuple[float, str, str]] = {
     year: (bbl * GHAWAR_SHARE, "derived", f"{reference}; x {GHAWAR_SHARE:.4f} ({GHAWAR_SHARE_REFERENCE})")
     for year, (bbl, reference) in SAUDI_CRUDE.items()
 }
-OFFTAKE = "place:ghawar-other-offtake"
+# Entities of earlier versions of the pilot, removed when it is seeded again.
+LEGACY_ENTITIES = ("portion:ghawar-other-offtake:arab-light", "place:ghawar-other-offtake")
+
+# Saudi Aramco proved reserves of crude oil and condensate, billion barrels, 31 December:
+# (value, reference). Ghawar's estimate of a year-end follows them in proportion to its
+# end-2018 figure (48.25 of 201.4): the only field figure Aramco has published.
+ARAMCO_RESERVES: dict[int, tuple[float, str]] = {
+    2018: (201.4, "Saudi Aramco Annual Report 2019: crude oil and condensate reserves under the Concession, 201.4 bn bbl"),
+    2019: (201.9, "Saudi Aramco Annual Report 2019: crude oil and condensate reserves under the Concession, 201.9 bn bbl"),
+    2020: (198.8, "Saudi Aramco Annual Report 2020: crude oil and condensate reserves under the Concession, 198.8 bn bbl"),
+    2021: (196.9, "Saudi Aramco Annual Report 2022: crude oil and condensate reserves under the Concession, 196.9 bn bbl"),
+    2022: (200.8, "Saudi Aramco Annual Report 2022: crude oil and condensate reserves under the Concession, 200.8 bn bbl"),
+    2023: (191.3, "Saudi Aramco Annual Report 2024: crude oil and condensate reserves under the Concession, 191.3 bn bbl"),
+    2024: (189.8, "Saudi Aramco Annual Report 2024: crude oil and condensate reserves under the Concession, 189.8 bn bbl"),
+    2025: (186.5, "Saudi Aramco Annual Report 2025: crude oil and condensate reserves under the Concession, 186.5 bn bbl"),
+}
 
 HISTORY_FROM = datetime(min(HISTORY), 1, 1, tzinfo=UTC)
 HISTORY_TO = datetime(max(HISTORY) + 1, 1, 1, tzinfo=UTC)
@@ -97,8 +115,13 @@ PARAMETERS = {
         "The whole flow is routed through Sikka and Jamnagar; in reality it is split between"
         " several Indian ports and refineries.",
         "Ghawar output is Saudi crude output times Ghawar's share of Aramco's capacity"
-        " (3.8 of 12.0 mb/d); what does not go to India leaves the field monthly into one"
-        " aggregate off-take (domestic refining and other exports) outside Saudi Arabia.",
+        " (3.8 of 12.0 mb/d). What does not go to India leaves the field monthly to the"
+        " published recipients of Saudi crude (Saudi refineries, crude burn, importing"
+        " countries) in proportion; volumes without a published recipient go to"
+        " 'Unknown recipient'. Transport to these recipients is not modelled.",
+        "Remaining Ghawar reserves are re-estimated each year-end in proportion to Saudi"
+        " Aramco's reported crude and condensate reserves (48.25 of 201.4 bn bbl at"
+        " end-2018); the balance shows the change as a revision.",
         "Vessels are synthetic. Sea lane and facility coordinates are schematic.",
         "Refinery yields are assumed mass shares that sum to one.",
         "Element compositions are typical values; the composition of other refinery outputs"
@@ -191,15 +214,6 @@ PLACES = [
         "place:arabian-basin",
         "place:eastern-province",
         "Largest conventional oil field; Arab-D reservoir.",
-    ),
-    (
-        OFFTAKE,
-        "Other Ghawar off-take (aggregate)",
-        "type:aggregate-offtake",
-        "place:earth",
-        None,
-        "Ghawar crude outside the pilot route: Saudi refineries and exports to other"
-        " destinations, aggregated.",
     ),
     (
         "place:sea-lane-ras-tanura-sikka",
@@ -392,7 +406,7 @@ def holders() -> list[tuple[str, list[str]]]:
     """Every entity that holds a portion, with the materials it holds."""
     products = list(PARAMETERS["refinery_yields"])
     rows = [("place:ghawar", [CRUDE]), ("asset:abqaiq", [CRUDE]), ("asset:ras-tanura", [CRUDE])]
-    rows += [(OFFTAKE, [CRUDE])]
+    rows += [(recipient[0], [CRUDE]) for recipient in RECIPIENTS]
     rows += [(vessel_id, [CRUDE]) for vessel_id, _ in VESSELS]
     rows += [("asset:sikka", [CRUDE]), ("asset:jamnagar", [CRUDE, *products])]
     return rows
@@ -415,6 +429,11 @@ def seed_pilot_world(db: Session) -> None:
                     str(year): {"bbl_per_day": bbl, "provenance": prov, "reference": ref}
                     for year, (bbl, prov, ref) in HISTORY.items()
                 },
+                "aramco_reserves": {str(y): v for y, (v, _) in ARAMCO_RESERVES.items()},
+                "saudi_disposition": {
+                    str(year): {r: bbl for r, (bbl, _, _) in rows.items()}
+                    for year, rows in SAUDI_DISPOSITION.items()
+                },
                 "ghawar_history": {
                     str(year): {"bbl_per_day": bbl, "provenance": prov, "reference": ref}
                     for year, (bbl, prov, ref) in GHAWAR_HISTORY.items()
@@ -428,6 +447,13 @@ def seed_pilot_world(db: Session) -> None:
         _upsert(db, entity_id, "place", name, description=description)
     for entity_id, name, _, _, _, _ in ASSETS:
         _upsert(db, entity_id, "asset", name)
+    if db.scalar(select(Entity.id).where(Entity.id.in_(LEGACY_ENTITIES)).limit(1)):
+        # Events of an earlier pilot post to these entities: drop them with the entities,
+        # the next run writes the events again.
+        clear_pilot_events(db)
+        db.execute(delete(Entity).where(Entity.id.in_(LEGACY_ENTITIES)))
+    for entity_id, name, kind, _, _, _, description in RECIPIENTS:
+        _upsert(db, entity_id, kind, name, description=description or None)
     for entity_id, name, _ in ACTORS:
         _upsert(db, entity_id, "actor", name, level="institutional")
     for symbol, name, molar_mass in ELEMENTS:
@@ -478,6 +504,15 @@ def seed_pilot_world(db: Session) -> None:
         _link(db, entity_id, "jurisdiction_of", jurisdiction)
     for entity_id, _, type_id in ACTORS:
         _link(db, entity_id, "instance_of", type_id)
+    for entity_id, _, kind, type_id, parent, operator, _ in RECIPIENTS:
+        _link(db, entity_id, "instance_of", type_id)
+        if kind == "place":
+            _link(db, entity_id, "part_of", parent)
+        else:
+            _link(db, entity_id, "located_in", parent)
+            _link(db, entity_id, "jurisdiction_of", "actor:saudi-arabia")
+            if operator:
+                _link(db, entity_id, "operated_by", operator)
     for vessel_id, _ in VESSELS:
         _link(db, vessel_id, "instance_of", "type:vessel")
     for symbol, _, _ in ELEMENTS:
@@ -538,7 +573,46 @@ def seed_pilot_world(db: Session) -> None:
                 evidence={**GHAWAR_ESTIMATE["evidence"], "value_bbl": GHAWAR_ESTIMATE["bbl"]},
             )
         )
+    # Later year-ends: the end-2018 figure scaled by Aramco's reported reserves.
+    for year, (bbl, valid_time, evidence) in ghawar_estimates().items():
+        if year == GHAWAR_ESTIMATE["valid_time"].year:
+            continue
+        observation_id = _relation_id(deposit_portion, "estimate", f"mass@{year}")
+        observation = db.get(Observation, observation_id)
+        if observation is None:
+            observation = Observation(id=observation_id, subject_id=deposit_portion)
+            db.add(observation)
+        observation.property, observation.unit = "mass", "kg"
+        observation.value = bbl * PARAMETERS["kg_per_bbl"]
+        observation.actuality, observation.epistemic_status = "estimate", "estimated"
+        observation.valid_time, observation.source_id = valid_time, SOURCE_ID
+        observation.evidence = evidence
     db.flush()
+
+
+def ghawar_estimates() -> dict[int, tuple[float, datetime, dict]]:
+    """Remaining Ghawar reserves at each year-end with Aramco data: (bbl, time, evidence)."""
+    first = GHAWAR_ESTIMATE["valid_time"].year
+    base = ARAMCO_RESERVES[first][0]
+    rows = {}
+    for year, (reserves, reference) in sorted(ARAMCO_RESERVES.items()):
+        if year < first:
+            continue
+        bbl = GHAWAR_ESTIMATE["bbl"] * reserves / base
+        evidence = (
+            GHAWAR_ESTIMATE["evidence"]
+            if year == first
+            else {
+                "system": "PRMS",
+                "class": "1P",
+                "basis": "remaining proved reserves, liquids; derived",
+                "reference": f"48.25 bn bbl (end-{first}) x {reserves} / {base}"
+                f" (Aramco crude and condensate reserves). {reference}",
+                "provenance": "derived",
+            }
+        )
+        rows[year] = (bbl, datetime(year, 12, 31, tzinfo=UTC), {**evidence, "value_bbl": bbl})
+    return rows
 
 
 def _haversine_nm(a: list[float], b: list[float]) -> float:
@@ -583,6 +657,17 @@ def ghawar_bbl_per_day(at: datetime, growth_pct: float = 0.0) -> tuple[float, st
     return GHAWAR_HISTORY[last][0] * (1 + growth_pct / 100) ** (at.year - last), "forecast"
 
 
+def recipients_of(at: datetime, growth_pct: float = 0.0) -> list:
+    """Ghawar output outside the pilot by recipient (bbl/d) in the year of ``at``."""
+    field_rate, field_provenance = ghawar_bbl_per_day(at, growth_pct)
+    pilot_rate, _ = flow_bbl_per_day(at, growth_pct)
+    year = data_year(at.year)
+    # Recipients take the same part of Saudi crude outside India as in the data year
+    # (without data for the year itself: the closest year with data).
+    base = SAUDI_CRUDE[year][0] - HISTORY[year][0] if year in SAUDI_CRUDE else 0.0
+    return allocate(field_rate - pilot_rate, year, base, field_provenance == "forecast")
+
+
 def flows_by_year(horizon: datetime, growth_pct: float = 0.0) -> list[dict]:
     """Yearly flow of every year that starts before the horizon."""
     rows = []
@@ -601,6 +686,15 @@ def flows_by_year(horizon: datetime, growth_pct: float = 0.0) -> list[dict]:
                 "ghawar_bbl_per_day": field_bbl,
                 "ghawar_provenance": field_provenance,
                 "ghawar_reference": GHAWAR_HISTORY[year][2] if year in GHAWAR_HISTORY else None,
+                "recipients": [
+                    {
+                        "recipient": share.recipient,
+                        "bbl_per_day": share.bbl_per_day,
+                        "provenance": share.provenance,
+                        "reference": share.reference,
+                    }
+                    for share in recipients_of(mid, growth_pct)
+                ],
             }
         )
     return rows
@@ -807,27 +901,25 @@ def generate_pilot_events(
         vessel.free_at = back_at
         ready = ready + timedelta(days=p["cargo_bbl"] / rate)
 
-    # The rest of Ghawar's output leaves the field once a month (at the month's last noon).
-    offtake = portion_id(OFFTAKE, CRUDE)
+    # The rest of Ghawar's output leaves the field once a month (at the month's last noon),
+    # one event per recipient.
     month = start
     while True:
         following = datetime(month.year + month.month // 12, month.month % 12 + 1, 1, tzinfo=UTC)
         at = following - timedelta(hours=12)
         if at > end:
             break
-        field_rate, field_provenance = ghawar_bbl_per_day(month, growth_pct)
-        pilot_rate, _ = flow_bbl_per_day(month, growth_pct)
         days = (following - month).days
-        other_kg = max(field_rate - pilot_rate, 0.0) * days * p["kg_per_bbl"]
-        if other_kg > 0:
+        for share in recipients_of(month, growth_pct):
+            kg = share.bbl_per_day * days * p["kg_per_bbl"]
             record(
                 "type:extract",
                 at,
-                field_provenance,
-                [(ghawar, -other_kg), (offtake, other_kg)],
+                share.provenance,
+                [(ghawar, -kg), (portion_id(share.recipient, CRUDE), kg)],
                 month=month.strftime("%Y-%m"),
-                field_bbl_per_day=round(field_rate),
-                pilot_bbl_per_day=round(pilot_rate),
+                recipient=share.recipient,
+                bbl_per_day=round(share.bbl_per_day),
             )
         month = following
 

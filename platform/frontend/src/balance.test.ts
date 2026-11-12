@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { periodBounds, quarterPeriod, resolveContext } from "./appContext";
 import { collapsedBelow, formatAmount, scopePath, searchScopes, visibleRows, type BalanceRow, type ScopeTree } from "./balance";
 
-const values = { opening: 0, inflow: 0, outflow: 0, transform: 0, carrier: 0, closing: 0, residual: 0, internal: 0 };
+const values = { opening: 0, inflow: 0, outflow: 0, transform: 0, carrier: 0, revision: 0, closing: 0, residual: 0, internal: 0 };
 const row = (id: string, depth: number, parent: string | null, group = false): BalanceRow => ({ id, name: id, symbol: null, depth, parent, group, values });
 
 const rows = [

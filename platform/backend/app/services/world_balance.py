@@ -3,7 +3,7 @@
 Organised like a financial trial balance (оборотно-сальдова відомість), one row per
 material (or chemical element) and the columns
 
-    opening + inflow - outflow + transform + carrier = closing   (+ residual)
+    opening + inflow - outflow + transform + carrier + revision = closing   (+ residual)
 
 * opening / closing — mass of the portions inside the scope at the period bounds
   (estimate plus postings, see ``world_query.portion_amounts``);
@@ -12,6 +12,8 @@ material (or chemical element) and the columns
   one material into others (refining);
 * carrier — cargo that crossed the scope boundary together with its carrier, a
   vessel whose ``located_in`` changed, without any posting;
+* revision — change of a stock by a new estimate of it (a reserve re-assessment):
+  the new value minus what the ledger had just before;
 * internal — turnover of moves inside the scope (net zero, shown for reference);
 * residual — what the ledger does not explain (for example a new stock estimate in
   the period). The design (MATTER_FLOW_AND_LOCATIONS.md §1) requires it to be shown.
@@ -33,7 +35,16 @@ from sqlalchemy.types import String
 from app.services.world_query import element_fractions, portion_amounts
 from app.services.world_scope import ScopeIndex, scope_roots
 
-FLOW_COLUMNS = ("opening", "inflow", "outflow", "transform", "carrier", "closing", "residual")
+FLOW_COLUMNS = (
+    "opening",
+    "inflow",
+    "outflow",
+    "transform",
+    "carrier",
+    "revision",
+    "closing",
+    "residual",
+)
 COLUMNS = (*FLOW_COLUMNS, "internal")
 LEVELS = ("substance", "molecular", "element")
 MATERIAL_ROOT = "type:material"
@@ -75,6 +86,7 @@ EVENT_LABELS = {
     "type:arrive": "Прибуття",
 }
 CARRIER = "Переміщення з носієм"
+REVISION = "Переоцінка запасу"
 
 
 def _ledger(
@@ -127,11 +139,27 @@ def _ledger(
                 if moment is not None and start < moment <= end:
                     moved_at[moment].add(subject)
 
+    # New stock estimates in the period: (portion, value) per moment.
+    estimates: dict[datetime, list[tuple[str, float]]] = defaultdict(list)
+    for row in db.execute(
+        text(
+            """
+            SELECT subject_id, value, valid_time FROM observations
+            WHERE property = 'mass' AND unit = 'kg' AND subject_id = ANY(:ids)
+              AND valid_time > :start AND valid_time <= :end
+            """
+        ).bindparams(bindparam("ids", type_=ARRAY(String))),
+        {"ids": portions, "start": start, "end": end},
+    ):
+        estimates[row.valid_time].append((row.subject_id, float(row.value)))
+
     # Timeline: carrier crossings at a moment come before the postings of that moment,
-    # so the cargo crosses with the amount it had just before.
+    # so the cargo crosses with the amount it had just before; an estimate comes last
+    # (it replaces whatever the postings of its moment gave).
     timeline = sorted(
         [(moment, 0, None) for moment in moved_at]
-        + [(headers[event_id][0], 1, event_id) for event_id in headers],
+        + [(headers[event_id][0], 1, event_id) for event_id in headers]
+        + [(moment, 2, None) for moment in estimates],
         key=lambda item: (item[0], item[1], item[2] or ""),
     )
 
@@ -145,6 +173,14 @@ def _ledger(
         # Sub-period i holds the moments in (edges[i], edges[i + 1]].
         bucket = max(bisect_left(edges, moment) - 1, 0)
         flows, breakdown = flows_at[bucket], breakdown_at[bucket]
+        if kind == 2:
+            for portion, value in estimates[moment]:
+                change = value - running[portion]
+                running[portion] = value
+                if change and index.contains(portion, moment):
+                    flows[materials[portion]]["revision"] += change
+                    breakdown[materials[portion]][(REVISION, "", None)]["revision"] += change
+            continue
         if kind == 0:
             for carrier in moved_at[moment]:
                 cargo = (index.descendants(carrier) | {carrier}) & materials.keys()
@@ -269,6 +305,7 @@ def _with_residual(values: dict[str, float]) -> dict[str, float]:
         - values["outflow"]
         + values["transform"]
         + values["carrier"]
+        + values["revision"]
     )
     return values
 
@@ -566,7 +603,7 @@ def balance_series(
         name = names.get(row_id.split("#")[0], {}).get("name", row_id)
     totals = _zero()
     for point in points:
-        for column in ("inflow", "outflow", "transform", "carrier", "internal"):
+        for column in ("inflow", "outflow", "transform", "carrier", "revision", "internal"):
             totals[column] += point["values"].get(column, 0.0)
     if flow is None and points:
         totals["opening"] = points[0]["values"].get("opening", 0.0)

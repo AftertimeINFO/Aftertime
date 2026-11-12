@@ -235,6 +235,11 @@ export default function WorldPlayback() {
   const portionOf = (holder: string, material = "type:arab-light") => data.portions.find((p) => p.holder === holder && p.material === material)?.id || "";
   const at = (holder: string, material?: string) => balances.get(portionOf(holder, material)) || 0;
   const produced = -at("place:ghawar");
+  // Ghawar crude outside the pilot route: Saudi refineries, crude burn, importing regions, Unknown.
+  const route = new Set(["place:ghawar", "asset:abqaiq", "asset:ras-tanura", "asset:sikka", "asset:jamnagar"]);
+  const others = data.portions
+    .filter((p) => !route.has(p.holder) && !p.holder.startsWith("vessel:"))
+    .reduce((sum, p) => sum + (balances.get(p.id) || 0), 0);
   const afloat = vessels.reduce((sum, v) => sum + at(v.vessel), 0);
   const products = Object.keys(data.parameters.refinery_yields).map((material) => ({ material, kg: at("asset:jamnagar", material) }));
   const inIndia = at("asset:sikka") + at("asset:jamnagar") + products.reduce((s, p) => s + p.kg, 0);
@@ -242,7 +247,7 @@ export default function WorldPlayback() {
   const estimate = data.estimate;
   const rows: [string, number][] = [
     ["Гавар → видобуто, усього", produced],
-    ["Інші напрями (агрегат)", at("place:ghawar-other-offtake")],
+    ["Інші отримувачі (НПЗ, експорт, Unknown)", others],
     ["Абкайк, сховище", at("asset:abqaiq")],
     ["Рас-Танура, термінал", at("asset:ras-tanura")],
     ["На танкерах", afloat],

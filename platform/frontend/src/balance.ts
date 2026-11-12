@@ -1,7 +1,7 @@
 /** Material balance of a scope over a period, as returned by GET /world/balance. */
 
 export type BalanceLevel = "substance" | "molecular" | "element";
-export type BalanceColumn = "opening" | "inflow" | "outflow" | "transform" | "carrier" | "closing" | "residual" | "internal";
+export type BalanceColumn = "opening" | "inflow" | "outflow" | "transform" | "carrier" | "revision" | "closing" | "residual" | "internal";
 export type BalanceValues = Record<BalanceColumn, number>;
 
 export type BalanceBreakdown = { event_type: string } & Partial<Record<BalanceColumn, number>>;
@@ -49,8 +49,9 @@ export const COLUMNS: { id: BalanceColumn; label: string; hint: string; signed?:
   { id: "outflow", label: "Вибуття", hint: "Проведення з контрагентом поза scope, витрата" },
   { id: "transform", label: "Трансформація", hint: "Перетворення одних матеріалів на інші всередині scope (переробка)", signed: true },
   { id: "carrier", label: "З носієм", hint: "Вантаж, що перетнув межу scope разом із судном, без проведення", signed: true },
+  { id: "revision", label: "Переоцінка", hint: "Зміна запасу через нову оцінку (переоцінка запасів родовища), а не через рух матерії", signed: true },
   { id: "closing", label: "Сальдо на кінець", hint: "Запас у межах scope на кінець періоду" },
-  { id: "residual", label: "Нев'язка", hint: "Те, чого журнал подій не пояснює (наприклад, нова оцінка запасу)", signed: true },
+  { id: "residual", label: "Нев'язка", hint: "Те, чого не пояснюють ні журнал подій, ні оцінки запасів", signed: true },
 ];
 
 /** Rows to render: children of a collapsed group are hidden, at any depth. */

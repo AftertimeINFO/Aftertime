@@ -27,6 +27,7 @@ const FLOW_COLOR: Record<string, string> = {
   outflow: "#d95926",
   transform: "#199e70",
   carrier: "#c98500",
+  revision: "#d55181",
 };
 const STOCK_COLOR = "#9085e9";
 const LABEL: Record<string, string> = Object.fromEntries(COLUMNS.map((c) => [c.id, c.label]));
@@ -388,7 +389,7 @@ function FlowChart({ data, unit, series }: { data: Series; unit: MassUnit; serie
             label: LABEL[column],
             color: FLOW_COLOR[column],
             value: data.points[hover].values[column as keyof BalanceValues] ?? 0,
-            signed: column === "transform" || column === "carrier",
+            signed: column === "transform" || column === "carrier" || column === "revision",
           }))}
         />
       )}

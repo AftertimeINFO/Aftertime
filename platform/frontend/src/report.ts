@@ -27,7 +27,7 @@ export const STEPS: { id: ReportStep; label: string; months: number }[] = [
 export const MAX_POINTS = 120;
 
 /** Flow columns of a series, in the order of the balance. */
-export const FLOWS: BalanceColumn[] = ["inflow", "outflow", "transform", "carrier"];
+export const FLOWS: BalanceColumn[] = ["inflow", "outflow", "transform", "carrier", "revision"];
 
 /** Number of calendar months touched by an inclusive period (YYYY-MM-DD). */
 export function monthsIn(from: string, to: string): number {

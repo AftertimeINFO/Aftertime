@@ -13,7 +13,6 @@ from app.world_pilot import (
     CRUDE,
     ELEMENTS,
     HISTORY,
-    OFFTAKE,
     PARAMETERS,
     RUN_ID,
     VESSELS,
@@ -83,7 +82,9 @@ def test_run_conserves_mass_and_ends_in_products(db):
     assert total == pytest.approx(0.0, abs=1e-3)
 
     produced = cargoes() * cargo_kg()
-    other = balance_of(db, portion_id(OFFTAKE, CRUDE), "mass")
+    from app.world_disposition import RECIPIENTS
+
+    other = sum(balance_of(db, portion_id(r[0], CRUDE), "mass") for r in RECIPIENTS)
     assert other > produced  # Ghawar sends most of its crude elsewhere
     assert balance_of(db, portion_id("place:ghawar", CRUDE), "mass") == pytest.approx(
         -(produced + other)
@@ -111,7 +112,14 @@ def test_regeneration_is_idempotent(db):
     # plus one off-take a month.
     voyages = after - offtakes(db)
     assert cargoes() * 10 - len(VESSELS) <= voyages <= cargoes() * 10
-    assert offtakes(db) == 12 * len(HISTORY)
+    # One extraction a month per recipient.
+    assert offtakes(db) >= 12 * len(HISTORY)
+    months = db.scalar(
+        select(func.count(func.distinct(WorldEvent.attributes["month"].astext))).where(
+            WorldEvent.run_id == RUN_ID, WorldEvent.attributes.has_key("month")
+        )
+    )
+    assert months == 12 * len(HISTORY)
 
 
 def test_history_years_follow_the_published_flows(db):
@@ -267,20 +275,31 @@ def test_contents_emerge_from_containment(db):
     gujarat = contents(db, "place:gujarat", moment)
     assert gujarat["total_kg"] >= sikka["total_kg"] > 0
 
-    # The deposit holds its estimate minus its production; elements carry atom counts.
+    # The deposit holds its latest estimate minus the production since; elements carry
+    # atom counts.
+    from app.world_pilot import ghawar_estimates
+
     end = datetime(2024, 6, 1, tzinfo=UTC)
+    bbl, valid_time, _ = max(
+        (row for row in ghawar_estimates().values() if row[1] <= end), key=lambda row: row[1]
+    )
     ghawar = contents(db, "place:ghawar", end)
-    produced = -balance_of(db, portion_id("place:ghawar", CRUDE), "mass", at=end)
+    deposit = portion_id("place:ghawar", CRUDE)
+    produced = balance_of(db, deposit, "mass", at=valid_time) - balance_of(
+        db, deposit, "mass", at=end
+    )
     assert produced > 0
-    expected = 48.25e9 * PARAMETERS["kg_per_bbl"] - produced
+    estimate = bbl * PARAMETERS["kg_per_bbl"]
+    expected = estimate - produced
     assert ghawar["total_kg"] == pytest.approx(expected)
     carbon = next(e for e in ghawar["elements"] if e["symbol"] == "C")
     assert carbon["kg"] == pytest.approx(expected * 0.8465)
     assert carbon["atoms"] == pytest.approx(carbon["kg"] * 1000 / 12.011 * 6.02214076e23)
 
-    # Earth contains everything: nothing is created or lost by the run.
+    # Earth contains everything: the run only moves matter; estimates reset the deposit.
     earth = contents(db, "place:earth", end)
-    assert earth["total_kg"] == pytest.approx(48.25e9 * PARAMETERS["kg_per_bbl"])
+    moved_out = -balance_of(db, deposit, "mass", at=valid_time)
+    assert earth["total_kg"] == pytest.approx(estimate + moved_out)
 
 
 def test_entity_api(db):
@@ -315,3 +334,37 @@ def test_version_endpoint():
     response = TestClient(app).get("/api/v1/world/version")
     assert response.json() == {"api": __version__}
     assert app.version == __version__
+
+
+def test_recipients_take_the_rest_of_ghawar_output(db):
+    from app.world_disposition import UNKNOWN
+    from app.world_pilot import GHAWAR_HISTORY, HISTORY, recipients_of
+
+    for year in GHAWAR_HISTORY:
+        shares = recipients_of(datetime(year, 6, 1, tzinfo=UTC))
+        total = sum(share.bbl_per_day for share in shares)
+        assert total == pytest.approx(GHAWAR_HISTORY[year][0] - HISTORY[year][0]), year
+        assert all(share.bbl_per_day > 0 for share in shares)
+        # Whatever no statistic places is shown as unknown, never dropped.
+        assert sum(1 for share in shares if share.recipient == UNKNOWN) <= 1
+
+
+def test_reserves_are_re_estimated_from_aramco_figures(db):
+    from app.services.world_balance import balance
+    from app.world_pilot import ARAMCO_RESERVES, ghawar_estimates
+
+    estimates = ghawar_estimates()
+    assert set(estimates) == {y for y in ARAMCO_RESERVES if y >= 2018}
+    assert estimates[2018][0] == pytest.approx(48.25e9)
+    later = [y for y in estimates if y > 2018]
+    if not later:
+        return
+    year = later[0]
+    result = balance(
+        db, "place:ghawar", datetime(year, 1, 1, tzinfo=UTC), estimates[year][1], "substance"
+    )
+    totals = result["totals"]
+    # The closing stock is the new estimate; the change it brings is a revision, not residual.
+    assert totals["closing"] == pytest.approx(estimates[year][0] * PARAMETERS["kg_per_bbl"])
+    assert totals["revision"] != 0
+    assert abs(totals["residual"]) < 1.0
