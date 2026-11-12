@@ -8,6 +8,7 @@ import "./styles.css";
 const App = lazy(() => import("./App"));
 const WorldPlayback = lazy(() => import("./WorldPlayback"));
 const WorldEntities = lazy(() => import("./WorldEntities"));
+const PromotePage = lazy(() => import("./PromotePage"));
 
 const path = window.location.pathname;
 const loading = <div className="shell-loading">Завантаження…</div>;
@@ -21,6 +22,12 @@ const page = path.startsWith("/world/entities") ? (
   <AppShell>
     <Suspense fallback={loading}>
       <WorldPlayback />
+    </Suspense>
+  </AppShell>
+) : path.startsWith("/promote") ? (
+  <AppShell>
+    <Suspense fallback={loading}>
+      <PromotePage />
     </Suspense>
   </AppShell>
 ) : path.startsWith("/lab") ? (

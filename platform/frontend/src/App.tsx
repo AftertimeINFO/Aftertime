@@ -146,7 +146,7 @@ const nodeTypes = { lab: GraphNode, workflow: BpmnNode, eventTrigger: EventTrigg
 
 export default function App() {
   const [w, setW] = useState<Workspace | null>(null),
-    [projectId, setProjectId] = useState(""),
+    [projectId, setProjectId] = useState(() => new URLSearchParams(window.location.search).get("project") || ""),
     [mode, setMode] = useState<"model" | "process" | "events" | "participants">("model"),
     [viewVersion, setViewVersion] = useState<Row | null>(null),
     [graphRows, setGraphRows] = useState<Row[]>([]),
@@ -253,6 +253,12 @@ export default function App() {
   useEffect(() => {
     if (!w) return;
     const item = w.scenarios.find((x) => x.id === scenario);
+    if (!item) {
+      // prePROD and PROD hold only promoted scenarios: fall back to the one of the open model.
+      const fallback = scenarioForModel(w.scenarios, w.version.id) ?? w.scenarios[0];
+      if (fallback) setScenario(fallback.id);
+      return;
+    }
     setRun(null);
     setSelectedId(null);
     api

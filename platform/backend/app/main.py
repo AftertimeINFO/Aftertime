@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from app import __version__
 from app.api.model_lab import router as model_lab_router
+from app.api.promotions import router as promotions_router
 from app.api.routes import router
 from app.api.world import router as world_router
 from app.config import settings
@@ -49,6 +50,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(model_lab_router)
 app.include_router(world_router)
+app.include_router(promotions_router)
 
 
 def layer_available(layer: str) -> bool:

@@ -22,6 +22,8 @@ const NAV: NavItem[] = [
     ],
   },
   { href: "/lab", label: "Моделі", glyph: "⌬", match: (p) => p.startsWith("/lab"), needs: ["lab.edit", "lab.run"] },
+  // Open in every layer: PROD shows where its models came from.
+  { href: "/promote", label: "Випуск моделей", glyph: "⇪", match: (p) => p.startsWith("/promote") },
 ];
 
 const RAIL_KEY = "aftertime.rail";

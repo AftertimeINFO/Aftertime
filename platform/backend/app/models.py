@@ -900,3 +900,21 @@ class LabUserCommand(Base):
     payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     status: Mapped[str] = mapped_column(String(30), default="submitted")
     result: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
+class LayerPromotion(Base):
+    """A model version promoted from one layer to the next (DEV → prePROD → PROD).
+
+    The record is written to both databases, so each layer knows where its models
+    came from and where they went.
+    """
+
+    __tablename__ = "layer_promotions"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
+    version_id: Mapped[str] = mapped_column(String(80), index=True)
+    project_id: Mapped[str] = mapped_column(String(80), index=True)
+    source_layer: Mapped[str] = mapped_column(String(20))
+    target_layer: Mapped[str] = mapped_column(String(20))
+    note: Mapped[str] = mapped_column(Text, default="")
+    summary: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
