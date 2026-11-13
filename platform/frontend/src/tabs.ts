@@ -8,7 +8,7 @@ import { createContext, useContext, useSyncExternalStore } from "react";
  * page has one tab that is focused again. The tabs survive reloads (localStorage); the
  * address bar always shows the active tab, so a link to it can be shared.
  */
-export type TabKind = "balance" | "turnover" | "chart" | "movements" | "world" | "entities" | "lab" | "compute" | "promote";
+export type TabKind = "balance" | "turnover" | "chart" | "movements" | "world" | "entities" | "energy" | "lab" | "compute" | "promote";
 
 export type Tab = {
   id: string;
@@ -41,6 +41,7 @@ export function kindOfPath(path: string): TabKind | null {
   if (clean === "/report/movements") return "movements";
   if (clean.startsWith("/world/entities")) return "entities";
   if (clean === "/world" || clean.startsWith("/world/")) return "world";
+  if (clean === "/energy" || clean.startsWith("/energy/")) return "energy";
   if (clean.startsWith("/lab")) return "lab";
   if (clean.startsWith("/compute")) return "compute";
   if (clean.startsWith("/promote")) return "promote";
@@ -54,6 +55,7 @@ export const HOME: Record<TabKind, string> = {
   movements: "/report/movements",
   world: "/world",
   entities: "/world/entities",
+  energy: "/energy",
   lab: "/lab",
   compute: "/compute",
   promote: "/promote",
@@ -84,6 +86,8 @@ export function tabTitle(tab: Tab): string {
       return "Світ · програвання";
     case "entities":
       return "Сутності";
+    case "energy":
+      return "Енергосистема";
     case "lab":
       return "Моделі";
     case "compute":

@@ -18,11 +18,19 @@ if [ "$mode" = "api" ]; then
   python -m app.seed --participants --layer dev
   # Pilot run (Saudi Arabia to India crude, 2023, assumed figures): DEV only, generated once.
   python -m app.seed --world-pilot --layer dev
+  # Grid scenarios (historical replays and what-if examples): additive, by id, every layer.
+  python -m app.layers urls | while read -r layer url; do
+    python -m app.seed --grid-scenarios --layer "$layer"
+  done
   exec uvicorn app.main:app --host 0.0.0.0 --port 8000
 fi
 
 if [ "$mode" = "worker" ]; then
   exec python -m app.worker
+fi
+
+if [ "$mode" = "grid-worker" ]; then
+  exec python -m app.grid.worker
 fi
 
 exec "$@"

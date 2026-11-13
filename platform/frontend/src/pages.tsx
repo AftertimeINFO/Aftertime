@@ -6,6 +6,7 @@ import type { TabKind } from "./tabs";
 const App = lazy(() => import("./App"));
 const WorldPlayback = lazy(() => import("./WorldPlayback"));
 const WorldEntities = lazy(() => import("./WorldEntities"));
+const EnergyPage = lazy(() => import("./energy/EnergyPage"));
 const PromotePage = lazy(() => import("./PromotePage"));
 const ComputePage = lazy(() => import("./ComputePage"));
 const ReportPage = lazy(() => import("./ReportPage"));
@@ -21,6 +22,7 @@ export function TabPage({ kind }: { kind: TabKind }) {
     : kind === "movements" ? <MovementsPage />
     : kind === "world" ? <WorldPlayback />
     : kind === "entities" ? <WorldEntities />
+    : kind === "energy" ? <EnergyPage />
     : kind === "lab" ? <App />
     : kind === "compute" ? <ComputePage />
     : <PromotePage />;

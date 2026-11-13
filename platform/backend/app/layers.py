@@ -26,17 +26,17 @@ LAYER_POLICY: dict[Layer, dict] = {
     "dev": {
         "label": "DEV",
         "description": "Спрощене моделювання та відладка моделей",
-        "capabilities": ["balance", "world", "lab.edit", "lab.run", "qualification", "data", "promote", "compute"],
+        "capabilities": ["balance", "world", "lab.edit", "lab.run", "qualification", "data", "promote", "compute", "grid", "grid.run"],
     },
     "preprod": {
         "label": "prePROD",
         "description": "Валідація моделей на реальних даних перед PROD",
-        "capabilities": ["balance", "world", "lab.run", "qualification", "data", "promote", "compute"],
+        "capabilities": ["balance", "world", "lab.run", "qualification", "data", "promote", "compute", "grid", "grid.run"],
     },
     "prod": {
         "label": "PROD",
         "description": "Глобальна модель з реальними даними та структурами",
-        "capabilities": ["balance", "world", "data"],
+        "capabilities": ["balance", "world", "data", "grid"],
     },
 }
 
@@ -113,6 +113,12 @@ def ensure_databases() -> None:
         engine.dispose()
 
 
+GRID_NAME_INDEX = (
+    "CREATE INDEX IF NOT EXISTS ix_grid_assets_name_trgm ON odbl.grid_assets "
+    "USING gin (lower(coalesce(name, '') || ' ' || coalesce(name_en, '') || ' ' "
+    "|| coalesce(ref, '')) gin_trgm_ops)"
+)
+
 EVENT_BALANCES_VIEW = """
 CREATE OR REPLACE VIEW event_balances AS
 SELECT p.event_id, p.property, p.unit, sum(p.delta) AS net, count(*) AS postings
@@ -144,7 +150,11 @@ def bootstrap_empty(url: str) -> bool:
             return False
         with engine.begin() as connection:
             connection.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+            # OSM-derived rows live in their own schema (ODbL layer, see app/grid).
+            connection.execute(text("CREATE SCHEMA IF NOT EXISTS odbl"))
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             Base.metadata.create_all(connection)
+            connection.execute(text(GRID_NAME_INDEX))
             connection.execute(text(EVENT_BALANCES_VIEW))
     finally:
         engine.dispose()

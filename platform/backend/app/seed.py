@@ -208,12 +208,40 @@ def seed_world_pilot(*, force: bool = False) -> None:
         db.commit()
 
 
+def seed_osm_power(regions: list[str], directory: str, *, fetch: bool = False) -> None:
+    """Import OSM power infrastructure of the regions into the ODbL layer of SEED_LAYER."""
+    from pathlib import Path
+
+    from app.db import engines
+    from app.grid.osm_import import import_region
+
+    for region in regions:
+        result = import_region(engines[SEED_LAYER], Path(directory), region, fetch=fetch)
+        print(f"{region}: {result}")
+
+
+def _option(argv: list[str], name: str, default: str | None = None) -> str | None:
+    return argv[argv.index(name) + 1] if name in argv else default
+
+
 if __name__ == "__main__":
+    import os
     import sys
 
     if "--layer" in sys.argv:
         SEED_LAYER = parse_layer(sys.argv[sys.argv.index("--layer") + 1])
-    if "--world-pilot" in sys.argv:
+    if "--grid-scenarios" in sys.argv:
+        from app.db import engines
+        from app.grid.scenario_seed import seed_grid_scenarios
+
+        print(f"grid scenarios: {seed_grid_scenarios(engines[SEED_LAYER])}")
+    elif "--osm-power" in sys.argv:
+        seed_osm_power(
+            (_option(sys.argv, "--region", "ua") or "ua").split(","),
+            _option(sys.argv, "--osm-dir", os.environ.get("OSM_DATA_DIR", "/data/osm")),
+            fetch="--fetch" in sys.argv,
+        )
+    elif "--world-pilot" in sys.argv:
         seed_world_pilot(force="--force" in sys.argv)
     elif "--world-core" in sys.argv:
         seed_world_core_vocabulary()

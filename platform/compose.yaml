@@ -79,6 +79,50 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Grid runs (DC power flow cascades, ensembles, N-1 screening) on the real network.
+  grid-worker:
+    build:
+      context: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://aftertime:aftertime-local@postgres:5432/aftertime}
+      DATABASE_URL_PREPROD: ${DATABASE_URL_PREPROD:-}
+      DATABASE_URL_PROD: ${DATABASE_URL_PROD:-}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    command: ["/app/docker-entrypoint.sh", "grid-worker"]
+    mem_limit: 3g
+    cpus: 2
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-off OSM power import into the ODbL layer (app/grid/osm_import.py), e.g.
+  #   docker compose --profile import run --rm osm-import --region ua,md,pl,sk,hu,ro,ru --fetch
+  # --fetch downloads Geofabrik extracts into the osm_data volume (raw/), filtered copies go
+  # to filtered/. A named volume, because bind mounts from Windows drives are far too slow
+  # for osmium; set OSM_DATA_DIR to a host path to use local files instead.
+  osm-import:
+    profiles: ["import"]
+    build:
+      context: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://aftertime:aftertime-local@postgres:5432/aftertime}
+      DATABASE_URL_PREPROD: ${DATABASE_URL_PREPROD:-}
+      DATABASE_URL_PROD: ${DATABASE_URL_PROD:-}
+      OSM_DATA_DIR: /data/osm
+    volumes:
+      - ${OSM_DATA_DIR:-osm_data}:/data/osm
+    entrypoint: ["python", "-m", "app.seed", "--osm-power"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend
@@ -99,3 +143,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  osm_data:

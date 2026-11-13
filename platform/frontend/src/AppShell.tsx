@@ -22,6 +22,7 @@ const NAV: NavItem[] = [
       { kind: "entities", label: "Сутності", glyph: "" },
     ],
   },
+  { kind: "energy", label: "Енергосистема", glyph: "ϟ", needs: ["grid"] },
   { kind: "lab", label: "Моделі", glyph: "⌬", needs: ["lab.edit", "lab.run"] },
   // Open in every layer: the page explains when a layer cannot compute.
   { kind: "compute", label: "Розрахунок світу", glyph: "◷" },
@@ -29,7 +30,7 @@ const NAV: NavItem[] = [
   { kind: "promote", label: "Випуск моделей", glyph: "⇪" },
 ];
 
-const GLYPH: Record<TabKind, string> = { balance: "Σ", turnover: "≡", chart: "↗", movements: "⇄", world: "◍", entities: "◍", lab: "⌬", compute: "◷", promote: "⇪" };
+const GLYPH: Record<TabKind, string> = { balance: "Σ", turnover: "≡", chart: "↗", movements: "⇄", world: "◍", entities: "◍", energy: "ϟ", lab: "⌬", compute: "◷", promote: "⇪" };
 const RAIL_KEY = "aftertime.rail";
 const EARTH = { scope: "place:earth", scopeName: "Earth" };
 
@@ -89,7 +90,7 @@ export default function AppShell() {
     return () => document.removeEventListener("click", onClick);
   }, []);
   const current = layers.find((l) => l.id === context.layer);
-  const capabilities = new Set(current?.capabilities ?? ["balance", "world", "lab.edit", "lab.run"]);
+  const capabilities = new Set(current?.capabilities ?? ["balance", "world", "lab.edit", "lab.run", "grid"]);
   const toggleRail = () => {
     setNarrow((value) => {
       try {

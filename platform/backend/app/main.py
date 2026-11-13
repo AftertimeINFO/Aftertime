@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app import __version__
+from app.api.grid import router as grid_router
 from app.api.model_lab import router as model_lab_router
 from app.api.promotions import router as promotions_router
 from app.api.routes import router
@@ -47,10 +49,13 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=[HEADER],
 )
+# Grid run frames and tiles are large JSON/binary payloads.
+app.add_middleware(GZipMiddleware, minimum_size=2048)
 app.include_router(router)
 app.include_router(model_lab_router)
 app.include_router(world_router)
 app.include_router(promotions_router)
+app.include_router(grid_router)
 
 
 def layer_available(layer: str) -> bool:

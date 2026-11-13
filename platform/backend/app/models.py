@@ -939,3 +939,8 @@ class WorldComputation(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# The ODbL grid layer keeps its tables in a separate module and schema; importing it here
+# registers them on Base.metadata for Alembic and for bootstrap_empty.
+from app.grid import models as grid_models  # noqa: E402,F401
