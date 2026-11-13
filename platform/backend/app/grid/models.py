@@ -130,6 +130,26 @@ class GridOverride(Base):
     __table_args__ = SCHEMA
 
 
+class GridControlArea(Base):
+    """Territory outside the control of the system operator from a date (e.g. occupation).
+
+    Assets inside an area valid on a snapshot date get the area's ``controlled_by`` code as
+    their country: they leave the national demand and supply, and branches to them open.
+    """
+
+    __tablename__ = "grid_control_areas"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(Text, unique=True)
+    country: Mapped[str] = mapped_column(String(8))
+    controlled_by: Mapped[str] = mapped_column(String(16))
+    valid_from: Mapped[date] = mapped_column(Date)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    geom = mapped_column(RawGeometry(4326))
+    source_url: Mapped[str] = mapped_column(Text)
+    note: Mapped[str] = mapped_column(Text, default="")
+    __table_args__ = (Index("ix_grid_control_areas_geom", "geom", postgresql_using="gist"), SCHEMA)
+
+
 class GridSnapshot(Base):
     """Bus-branch network built from the assets as they stood on ``as_of``."""
 

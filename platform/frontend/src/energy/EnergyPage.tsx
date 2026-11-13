@@ -235,7 +235,7 @@ export default function EnergyPage() {
       <header className="en-head">
         <div className="en-title">
           <h2>Енергосистема</h2>
-          <small>{summary?.imported ? `дані OSM станом на ${fresh ? fmtDate(fresh) : "—"}` : "мережу не імпортовано"}</small>
+          <small>{!summary ? "завантаження даних мережі…" : summary.imported ? `дані OSM станом на ${fresh ? fmtDate(fresh) : "—"}` : "мережу не імпортовано"}</small>
         </div>
         <div className="en-segmented" role="tablist" aria-label="Режим">
           {MODES.map((m) => (

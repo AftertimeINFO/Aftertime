@@ -190,7 +190,7 @@ def test_line_parameters_scale_with_voltage_length_and_circuits():
     assert x750 < x1 and r750 > r1
 
 
-def test_sudden_loss_is_covered_only_as_fast_as_units_start():
+def test_sudden_loss_is_covered_only_as_fast_as_units_start(monkeypatch):
     # Nuclear carries the load; a gas plant stands by. Losing the nuclear plant leaves a
     # deficit at once that shrinks as gas units start (50% of capacity per hour).
     net = network(gens=((0, 2000.0, "nuclear"), (2, 4000.0, "gas")))
@@ -200,10 +200,37 @@ def test_sudden_loss_is_covered_only_as_fast_as_units_start():
         "step_hours": 1,
         "events": [{"at": "2024-01-15T18:00:00Z", "type": "strike", "targets": [301]}],
     }
-    state_factor = 1500 / demand_mw("UA", MOMENT)
-    scenario["events"].insert(0, {"at": "2024-01-15T17:00:00Z", "type": "demand", "payload": {"countries": ["UA"], "factor": state_factor}})
+    import app.grid.engine as engine
+
+    monkeypatch.setattr(engine, "demand_mw", lambda country, moment: 1500.0)
     frames = simulate(net, scenario, [], seed=1)["frames"]
     unserved = [f["metrics"]["unserved_mw"] for f in frames]
     assert unserved[0] == 0
     assert unserved[1] > 0, "gas was not running when the nuclear plant was lost"
     assert unserved[-1] == 0, "gas has started within two hours"
+
+
+def test_conditions_at_the_start_are_not_covered_by_unmodelled_supply(monkeypatch):
+    # A cold spell present from the start must show as a deficit, not be balanced away.
+    import app.grid.engine as engine
+
+    monkeypatch.setattr(engine, "demand_mw", lambda country, moment: 1500.0)
+    net = network(gens=((0, 2000.0, "nuclear"),))
+    scenario = {
+        "start_at": "2024-01-15T17:00:00Z",
+        "end_at": "2024-01-15T18:00:00Z",
+        "events": [{"at": "2024-01-15T17:00:00Z", "type": "demand", "payload": {"countries": ["UA"], "factor": 1.3}}],
+    }
+    frames = simulate(net, scenario, [], seed=1)["frames"]
+    assert frames[0]["metrics"]["unserved_mw"] == pytest.approx(1950 - 1700, abs=1)
+
+
+def test_fuel_limit_can_apply_to_one_country():
+    net = network(gens=((0, 2000.0, "coal"),))
+    state = State.initial(net)
+    apply(net, state, {"type": "fuel", "fuels": ["coal"], "countries": ["PL"], "factor": 0.0})
+    assert state.fuel_factor == {"coal@PL": 0.0}
+    apply(net, state, {"type": "fuel", "fuel": "coal", "countries": ["UA"], "factor": 0.5})
+    from app.grid.engine import _available
+
+    assert _available(net, state, MOMENT, committed=False)[0] == pytest.approx(2000 * 0.55 * 0.5)

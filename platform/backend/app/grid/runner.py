@@ -32,6 +32,7 @@ from app.grid.engine import (
     SEPARATIONS,
     Network,
     State,
+    adapt_to_losses,
     commit,
     load_network,
     secure_base_case,
@@ -111,7 +112,9 @@ class Timeline:
         field = override["field"]
         value = override["value"]
         label = override.get("note") or f"Правка: {field} = {value}"
-        base = {"targets": [override["asset_id"]], "source_url": override.get("source_url"), "label": label, "origin": "override"}
+        # A correction in force before the start is the normal state of the system, not a shock.
+        prior = bool(begin) and datetime.combine(begin, datetime.min.time(), UTC) < start
+        base = {"targets": [override["asset_id"]], "source_url": override.get("source_url"), "label": label, "origin": "override", "prior": prior}
         if field == "status":
             kind = "outage" if value in OUT_STATUSES else "restore"
             self._push(at, {**base, "type": kind})
@@ -239,7 +242,12 @@ def apply(net: Network, state: State, action: dict) -> None:
         for country in action.get("countries") or net.countries:
             state.demand_factor[country.upper()] = float(action.get("factor", 1.0))
     elif kind == "fuel":
-        state.fuel_factor[action["fuel"]] = float(action.get("factor", 1.0))
+        factor = float(action.get("factor", 1.0))
+        fuels = action.get("fuels") or [action["fuel"]]
+        countries = [c.upper() for c in action.get("countries") or []]
+        for fuel in fuels:
+            for key in ([f"{fuel}@{c}" for c in countries] if countries else [fuel]):
+                state.fuel_factor[key] = factor
     elif kind in {"separate", "resync"}:
         countries = [c.upper() for c in action.get("countries") or []]
         pairs = {frozenset({a, b}) for a in countries for b in countries if a != b}
@@ -284,13 +292,15 @@ def simulate(
     timeline = Timeline(net, scenario, overrides, rng)
     state = State.initial(net)
     state.separated = _base_separations(start.date())
-    # Conditions at the start (demand, fuel, separations) shape the base case; damage at the
-    # start does not, or unmodelled supply would quietly cover it.
+    # Balance the undisturbed system under normal conditions first. Everything in force at
+    # the start — damage, occupation, demand and fuel conditions — is applied afterwards, so
+    # unmodelled supply never covers it and a standing deficit stays visible.
+    base = secure_base_case(net, state, start)
     initial = timeline.due(start)
     for action in initial:
-        if action["type"] in CONDITIONS:
-            apply(net, state, action)
-    base = secure_base_case(net, state, start)
+        apply(net, state, action)
+    if initial:
+        base.update(adapt_to_losses(net, state, start))
     times = frame_times(start, end, float(scenario.get("step_hours", 1.0)), timeline.event_times())
     frames: list[dict] = []
     previous_time = start
@@ -303,11 +313,14 @@ def simulate(
         if sequence:
             # Units start up over the interval before this moment, not after its events.
             commit(net, state, moment, hours)
-        else:
-            actions = initial + actions
+            # Operators re-close lines tripped by protection after a couple of hours; the
+            # solve trips them again if they are still overloaded.
+            if hours >= 2:
+                state.br_tripped[:] = False
         for action in actions:
-            if not (sequence == 0 and action["type"] in CONDITIONS and action in initial):
-                apply(net, state, action)
+            apply(net, state, action)
+        if not sequence:
+            actions = initial + actions
         # Units lost now stop at once; there is no time yet to start others. Losses already
         # in place at the start happened long before: the start is committed around them.
         commit(net, state, moment, 0.0 if sequence else None)
@@ -316,8 +329,11 @@ def simulate(
         share = solution.unserved_mw / solution.demand_mw if solution.demand_mw else 0.0
         # Frequency dip proxy: only a sudden new deficit dips; a standing one is handled by
         # emergency schedules and the frequency is back at 50 Hz.
+        # The planned daily rise of demand under a standing deficit is met by schedules, not
+        # by a dip: only losses (events, protection trips) count.
+        sudden = solution.tripped or any(a["type"] in {"outage", "strike", "separate", "fuel"} for a in actions)
         jump = share - (share if previous_share is None else previous_share)
-        frequency = 50.0 - min(2.5, 10 * jump) if jump > 0.005 else 50.0
+        frequency = 50.0 - min(2.5, 10 * jump) if sudden and jump > 0.005 else 50.0
         previous_unserved, previous_time, previous_share = solution.unserved_mw, moment, share
         if solution.unserved_mw > peak["unserved_mw"]:
             peak = {"unserved_mw": round(solution.unserved_mw), "at": moment.isoformat()}
@@ -384,7 +400,8 @@ def check_expected(frames: list[dict], expected: dict) -> list[dict]:
         elif op == "max":
             ok = float(value) <= fact
         else:
-            ok = abs(float(value) - fact) <= tolerance * max(abs(fact), 1.0)
+            # Tolerance is relative to the reported value (an absolute one when it is zero).
+            ok = abs(float(value) - fact) <= tolerance * (abs(fact) if fact else 1.0)
         results.append({**check, "model": value, "ok": bool(ok), "at_model": frame["at"].isoformat()})
     return results
 
@@ -611,9 +628,12 @@ def criticality(
     base_state.separated = _base_separations(moment.date())
     if scenario is not None:
         timeline = Timeline(net, {**scenario, "start_at": moment}, overrides or [], np.random.default_rng(0))
+        secure_base_case(net, base_state, moment)
         for action in timeline.due(moment):
             apply(net, base_state, action)
-    secure_base_case(net, base_state, moment)
+        adapt_to_losses(net, base_state, moment)
+    else:
+        secure_base_case(net, base_state, moment)
     already_out = {
         int(net.bus_asset[i]) for i in np.flatnonzero(~base_state.bus_up) if net.bus_asset[i] >= 0
     } | {int(net.gen_asset[i]) for i in np.flatnonzero(base_state.gen_factor <= 0.001)}

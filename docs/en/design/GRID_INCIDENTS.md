@@ -1,6 +1,6 @@
 ---
 document_id: aftertime.design.grid-incidents
-revision: 1
+revision: 2
 status: draft
 language: en
 canonical: true
@@ -41,7 +41,13 @@ OSM describes the present. A replay of the past and a realistic present need
 dated, sourced corrections: `status` (destroyed, damaged, occupied, disused,
 active), `capacity_mw`, `availability`, `in_service_from`, `out_of_service_from`,
 `controlled_by`. Every correction MUST have a source URL. Overrides become events
-of every run.
+of every run, historical or what-if.
+
+Control areas are territories outside the operator's control from a date (for
+example Crimea from 2014). Assets inside an area valid on the snapshot date take
+the area's code instead of the country: they leave the national demand and
+supply, and branches to them are open. Demand density is computed from
+controlled territory only.
 
 ## 3. Network model (topology snapshot)
 
@@ -78,10 +84,17 @@ Each step of a run:
 5. metrics: deficit, energy not served, generation, a frequency-dip proxy,
    islands, elements out; compact states of branches, buses and plants for the map.
 
-The base case is balanced and N-0 secure: missing generation in OSM becomes
-unmodelled supply spread over the loads, loads in islands without generation are
-treated as locally supplied, and ratings already exceeded by base flows are
-raised. The run summary lists these assumptions.
+The base case is balanced and N-0 secure on the undisturbed system under normal
+conditions: missing generation in OSM becomes unmodelled supply spread over the
+loads, loads in islands without generation are treated as locally supplied, and
+ratings already exceeded by base flows are raised. Everything in force at the
+start (damage, occupation, demand and fuel conditions) is applied after that:
+units are re-committed and ratings adapted, but no supply is added, so a
+standing deficit stays visible. The run summary lists these assumptions.
+
+Protection trips are re-closed after two hours; a line that is still overloaded
+trips again. The frequency-dip proxy reacts only to sudden losses (events and
+trips), not to the planned daily rise of demand.
 
 Runs are single, ensemble (Monte Carlo over hit probabilities and repair times,
 P10–P90 bands) or N-1 screening (substations from 220 kV and lines from 300 kV,
@@ -95,8 +108,34 @@ data. Where the exact targets of an attack are not public, the scenario uses
 conditional targets chosen at random and says so. Each scenario carries checks
 against reported facts; the UI shows model against fact.
 
+A check is either validation or calibration. A calibration check was used to
+choose a model parameter and therefore is not independent evidence; the UI marks
+it.
+
 Pilot: attacks on the energy system of Ukraine 2022–2026 (a weekly chronology
 of generation losses and the system blackout of 23 November 2022).
+
+### 5.1 Calibration of the pilot (revision 2)
+
+Sourced inputs: occupied or destroyed thermal plants (Starobeshivska and Zuivska
+from 2017; Luhansk, Zaporizhzhia and Vuhlehirska in 2022; Kurakhove inoperable
+from March 2024), Crimea as a control area from 2014, the Zaporizhzhia NPP,
+Kakhovka HPP, DniproHES and Trypilska TPP, Zmiivska TPP (Centrenergo lost 100% on
+11 April 2024) and DTEK thermal plants at 20% from 29 March 2024 (about 80% of
+capacity lost).
+
+One estimated parameter: the share of thermal and hydro capacity available after
+the seven waves of 10 October – 23 November 2022 (0.28), calibrated to the 27%
+deficit reported by Ukrenergo on 30 November 2022 and lifted on 12 February 2023,
+when Ukrenergo reported no deficit.
+
+| Check | Reported | Model | Role |
+| --- | --- | --- | --- |
+| 23.11.2022, 17:00 Kyiv, consumers without supply | ≥ 50% | 67% | validation |
+| 24.11.2022, share of needs not covered | ~50% | 63% | validation |
+| 30.11.2022, 11:00 Kyiv, deficit | 27% | 20% | calibration |
+| January 2026, peak deficit | ~7 GW | 4.7 GW | validation |
+| January 2026, available generation | ~11 GW | 13.6 GW | validation |
 
 ## 6. Interface
 
@@ -108,8 +147,13 @@ model-against-fact table.
 
 ## 7. Known limits
 
-- The engine is quasi-static: it does not model frequency dynamics; a collapse
-  driven by frequency (as on 23 November 2022) is underestimated.
+- The engine is quasi-static: it does not model frequency dynamics; the depth of
+  a collapse driven by frequency comes from the energy balance, not from the
+  dynamics.
+- Only Crimea is a control area so far; occupied parts of the mainland enter
+  through plant-level corrections. Their substations and loads still count in the
+  Ukrainian network.
+- Strike targets that are not public are conditional (random) targets.
 - Line ratings and reactances are typical values; demand is a national profile.
 - OSM capacity coverage varies; unmodelled supply fills national gaps.
 - Synchronous areas change by date: UA–RU and UA–BY branches open from

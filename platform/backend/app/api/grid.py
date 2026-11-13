@@ -189,11 +189,26 @@ def tile(z: int, x: int, y: int, request: Request, db: Session = Depends(get_db)
 # --- overview, search and cards ----------------------------------------------------------
 
 
+_summary_cache: dict[tuple, dict] = {}
+
+
 @router.get("/summary")
-def summary(db: Session = Depends(get_db)) -> dict:
-    """What is imported: counts by country and kind, batches, extent and attribution."""
+def summary(request: Request, db: Session = Depends(get_db)) -> dict:
+    """What is imported: counts by country and kind, batches, extent and attribution.
+
+    Aggregating millions of rows takes seconds, so the answer is cached per data version.
+    """
     if not _has_table(db):
         return {"imported": False, "countries": [], "batches": [], "attribution": OSM_ATTRIBUTION}
+    layer = request_layer(request)
+    key = (layer, _data_version(db, layer))
+    if key not in _summary_cache:
+        _summary_cache.clear()
+        _summary_cache[key] = _summary(db)
+    return _summary_cache[key]
+
+
+def _summary(db: Session) -> dict:
     rows = db.execute(
         text(
             "SELECT country, kind, count(*) AS n, sum(capacity_mw) AS mw, sum(length_km) AS km "

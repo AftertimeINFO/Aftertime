@@ -15,7 +15,7 @@ export type Frame = {
   events: FrameEvent[];
 };
 export type Band = { p10: number; p50: number; p90: number };
-export type Check = { metric: string; at?: string; value: number; op?: string; tolerance?: number; label: string; source_url?: string; country?: string; model: number | null; ok: boolean; at_model: string };
+export type Check = { role?: "calibration" | "validation"; metric: string; at?: string; value: number; op?: string; tolerance?: number; label: string; source_url?: string; country?: string; model: number | null; ok: boolean; at_model: string };
 export type CriticalAsset = { asset_id: number; unserved_mw: number; tripped: number; islands: number; kind?: string; name?: string | null; max_voltage_kv?: number | null; country?: string };
 export type RunSummary = {
   snapshot_id?: number;

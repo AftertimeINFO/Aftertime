@@ -60,6 +60,9 @@ DEFAULT_AVAILABILITY = 0.5
 SEPARATIONS: list[tuple[frozenset[str], date, str]] = [
     (frozenset({"UA", "RU"}), date(2022, 2, 24), "UA відокремлено від ОЕС Росії"),
     (frozenset({"UA", "BY"}), date(2022, 2, 24), "UA відокремлено від ОЕС Білорусі"),
+    # Assets in a control area (grid_control_areas) carry its code instead of the country.
+    (frozenset({"UA", "UA-OCC"}), date(2014, 1, 1), "Окуповані території поза енергосистемою України"),
+    (frozenset({"MD", "UA-OCC"}), date(2014, 1, 1), "Окуповані території поза енергосистемою Молдови"),
 ]
 
 
@@ -279,7 +282,8 @@ def _available(net: Network, state: State, moment: datetime, *, committed: bool 
     sun = solar_factor(moment)
     for i, fuel in enumerate(net.gen_fuel):
         factor = sun if fuel == "solar" else AVAILABILITY.get(fuel or "", DEFAULT_AVAILABILITY)
-        factor *= state.fuel_factor.get(fuel or "", 1.0)
+        country = net.bus_country[net.gen_bus[i]]
+        factor *= state.fuel_factor.get(f"{fuel}@{country}", state.fuel_factor.get(fuel or "", 1.0))
         avail[i] = state.gen_capacity[i] * factor * state.gen_factor[i]
     if committed and state.committed is not None:
         avail = np.minimum(avail, state.committed)
@@ -495,3 +499,15 @@ def secure_base_case(net: Network, state: State, moment: datetime) -> dict:
     report["ratings_raised"] = int(over.sum())
     report["base_unserved_mw"] = round(solution.unserved_mw)
     return report
+
+
+def adapt_to_losses(net: Network, state: State, moment: datetime) -> dict:
+    """After long-standing losses (in force before the start) the system has adapted: units
+    are re-committed and the routing of flows was reinforced — but no supply is added, so a
+    standing deficit stays visible."""
+    commit(net, state, moment, None)
+    solution = solve(net, state, moment, trip_threshold=float("inf"))
+    over = solution.loading > 0.9
+    state.rating = state.rating.copy()
+    state.rating[over] = np.abs(solution.flows[over]) / 0.9
+    return {"ratings_raised_after_losses": int(over.sum()), "standing_unserved_mw": round(solution.unserved_mw)}

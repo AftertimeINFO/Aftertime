@@ -159,6 +159,7 @@ export function RunSummaryPanel({ run, scenario, frame, onSelectAsset, onSeek }:
                 <tr key={i} className={c.ok ? "ok" : "bad"}>
                   <td>
                     <button className="en-link-btn" onClick={() => onSeek(c.at_model)}>{c.label}</button>
+                    {c.role === "calibration" && <span className="en-tag" title="За цим фактом підібрано параметр моделі, тож це не незалежна перевірка">калібрування</span>}
                     {c.source_url && <a href={c.source_url} target="_blank" rel="noreferrer noopener" aria-label="Джерело факту"> ↗</a>}
                   </td>
                   <td>{fmtCheck(c.metric, c.value, c.op)}</td>
@@ -168,7 +169,7 @@ export function RunSummaryPanel({ run, scenario, frame, onSelectAsset, onSeek }:
               ))}
             </tbody>
           </table>
-          <p className="en-hint">Розбіжність — не помилка інтерфейсу, а сигнал калібрування: які дані чи припущення моделі слід уточнити (правками об'єктів).</p>
+          <p className="en-hint">Розбіжність — не помилка інтерфейсу, а сигнал калібрування: які дані чи припущення моделі слід уточнити (правками об'єктів). Позначка «калібрування» — за цим фактом підібрано параметр, тож незалежною перевіркою є решта рядків.</p>
         </section>
       )}
       {s.base && (

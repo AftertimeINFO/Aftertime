@@ -19,6 +19,24 @@ SOUTH_UKRAINE = {"kind": "plant", "name": "%Південноукраїнська
 KAKHOVKA = {"kind": "plant", "name": "%Каховськ%ГЕС%", "alt": "%Kakhovka%", "country": "UA"}
 DNIPRO_HPP = {"kind": "plant", "name": "%ДніпроГЕС%", "alt": "%Дніпровськ%ГЕС%", "country": "UA"}
 TRYPILSKA = {"kind": "plant", "name": "%Трипільськ%ТЕС%", "alt": "%Trypil%", "country": "UA"}
+ZAPORIZHZHIA_TPP = {"kind": "plant", "name": "Запорізька ТЕС", "alt": "Zaporizhzhia Power Plant", "country": "UA"}
+LUHANSK_TPP = {"kind": "plant", "name": "%Луганська%електростанція%", "alt": "Luhansk power station", "country": "UA"}
+VUHLEHIRSKA_TPP = {"kind": "plant", "name": "Вуглегірська ТЕС", "alt": "%Vuhlehirska%", "country": "UA"}
+KURAKHOVE_TPP = {"kind": "plant", "name": "Курахівська ТЕС", "alt": "Kurakhove Power Station", "country": "UA"}
+STAROBESHIVSKA_TPP = {"kind": "plant", "name": "Старобешівська ТЕС", "alt": "Starobeshivska TPP", "country": "UA"}
+ZMIIVSKA_TPP = {"kind": "plant", "name": "Зміївська ТЕС", "alt": "Zmiivska power plant", "country": "UA"}
+DTEK_TPPS = [
+    {"kind": "plant", "name": "Бурштинська ТЕС", "alt": "Burshtyn TES", "country": "UA"},
+    {"kind": "plant", "name": "Ладижинська ТЕС", "alt": "Ladyzhyn Thermal Power Plant", "country": "UA"},
+    {"kind": "plant", "name": "Добротвірська ТЕС", "alt": "Dobrotvir power station", "country": "UA"},
+    {"kind": "plant", "name": "Криворізька ТЕС", "alt": "Kryvoy Rog TEPS", "country": "UA"},
+    {"kind": "plant", "name": "Придніпровська ТЕС", "alt": "Prydniprovska power station", "country": "UA"},
+]
+# Share of thermal and hydro capacity still available after the seven waves of
+# 10.10–23.11.2022 (all large plants damaged). Not reported as a number: calibrated so that
+# the deficit after the NPPs returned matches Ukrenergo's 27% of 30.11.2022.
+WAVES_2022_AVAILABLE = 0.28
+ZUIVSKA_TPP = {"kind": "plant", "name": "Зуєвська ТЕС", "alt": "Zuivska power station", "country": "UA"}
 
 SOURCES = {
     "iaea_znpp_shutdown": "https://www.aljazeera.com/news/2022/9/11/last-reactor-at-ukraines-zaporizhzhia-nuclear-plant-shut-down",
@@ -28,6 +46,18 @@ SOURCES = {
     "trypilska": "https://www.pravda.com.ua/eng/news/2024/04/11/7450746",
     "ohchr_2024": "https://ukraine.ohchr.org/en/Attacks-on-Ukraines-Energy-Infrastructure-Harm-to-the-Civilian-Population",
     "ohchr_2026": "https://ukraine.un.org/en/318327-attacks-against-ukraine%E2%80%99s-energy-infrastructure-and-update-human-rights-situation-ukraine-1",
+    "ztpp": "https://kyivindependent.com/ukraines-biggest-thermal-power-plant-stops-due-to-coal-shortage",
+    "luhansk_tpp": "https://energo.dtek.com/en/media-center/press/luganska-tes-vidklyuchena-vid-energosistemi-cherez-nestabilnu-situatsiyu-v-regio/",
+    "vuhlehirska": "https://www.aljazeera.com/news/2022/7/27/russian-forces-ukraine-both-claim-control-of-vital-power-plant",
+    "kurakhove": "https://ceobs.org/ukraine-damage-map-kurakhivska-thermal-power-plant/",
+    "starobeshivska": "https://www.unian.info/economics/1839231-donbasenergo-loses-control-of-starobeshivska-tpp-in-occupied-donbas",
+    "waves_2022": "https://www.pravda.com.ua/eng/news/2022/11/22/7377445",
+    "nov_24_2022": "https://pravda.com.ua/eng/news/2022/11/24/7377862",
+    "nov_30_2022": "https://kyivindependent.com/ukrenergo-ukraine-faces-27-electricity-shortage-as-of-11-a-m-on-nov-30",
+    "no_deficit_2023": "https://kyivindependent.com/ukrenergo-no-power-dificit-in-ukraine/",
+    "dtek_80": "https://www.pravda.com.ua/eng/news/2024/04/3/7449397",
+    "centrenergo_100": "https://komersant.ua/en/chornyy-den-tsentrenerho-vtratyla-100-heneratsii-2/",
+    "crimea": "https://digitallibrary.un.org/record/767565",
     "ohchr_jan_2026": "https://ukraine.ohchr.org/sites/default/files/2026-02/Ukraine%20-%20protection%20of%20civilians%20in%20armed%20conflict%20%28January%202026%29_ENG.pdf",
 }
 
@@ -39,6 +69,55 @@ LOSSES: list[tuple[dict, str, object, str, str, str]] = [
     (KAKHOVKA, "status", "destroyed", "2023-06-06", "Каховська ГЕС зруйнована (06.06.2023)", "kakhovka"),
     (DNIPRO_HPP, "availability", 0.67, "2024-03-22", "ДніпроГЕС втратила близько третини потужності (22.03.2024)", "dnipro_hpp"),
     (TRYPILSKA, "status", "destroyed", "2024-04-11", "Трипільська ТЕС зруйнована (11.04.2024)", "trypilska"),
+    # Thermal plants in occupied territory: outside the Ukrainian power system.
+    (STAROBESHIVSKA_TPP, "status", "occupied", "2017-03-21", "Старобешівська ТЕС поза контролем України (з 2017)", "starobeshivska"),
+    (ZUIVSKA_TPP, "status", "occupied", "2017-03-15", "Зуївська ТЕС поза контролем України (з 2017)", "starobeshivska"),
+    (LUHANSK_TPP, "status", "occupied", "2022-02-21", "Луганська ТЕС зупинена й окупована (лютий 2022)", "luhansk_tpp"),
+    (ZAPORIZHZHIA_TPP, "status", "occupied", "2022-03-04", "Запорізька ТЕС окупована (04.03.2022)", "ztpp"),
+    (VUHLEHIRSKA_TPP, "status", "occupied", "2022-07-26", "Вуглегірська ТЕС окупована (26.07.2022)", "vuhlehirska"),
+    (KURAKHOVE_TPP, "status", "destroyed", "2024-03-01", "Курахівська ТЕС непрацездатна (березень 2024)", "kurakhove"),
+    # Strikes of March–April 2024 on thermal generation.
+    (ZMIIVSKA_TPP, "status", "destroyed", "2024-04-11", "Зміївська ТЕС: Центренерго втратило 100% генерації (11.04.2024)", "centrenergo_100"),
+    *[
+        (plant, "availability", 0.2, "2024-03-29", "ТЕС ДТЕК: втрачено ~80% потужності (22–29.03.2024)", "dtek_80")
+        for plant in DTEK_TPPS
+    ],
+]
+
+
+def _waves_2022(at: str) -> dict:
+    return {
+        "at": at, "type": "fuel",
+        "label": f"Сім хвиль ударів 10.10–23.11.2022 пошкодили всі великі ТЕС і ГЕС (доступно ~{round(WAVES_2022_AVAILABLE * 100)}%, калібровано)",
+        "payload": {"fuels": ["coal", "gas", "hydro"], "countries": ["UA"], "factor": WAVES_2022_AVAILABLE},
+        "source_url": SOURCES["waves_2022"],
+    }
+
+
+def _recovery_2023(at: str) -> dict:
+    return {
+        "at": at, "type": "fuel", "label": "Дефіциту потужності немає з 12.02.2023 (Укренерго)",
+        "payload": {"fuels": ["coal", "gas", "hydro"], "countries": ["UA"], "factor": 1.0},
+        "source_url": SOURCES["no_deficit_2023"],
+    }
+
+# Territory outside the control of Ukrenergo: its assets leave the Ukrainian system. The
+# outline is a coarse polygon of the peninsula (cut along the isthmuses), enough to tell
+# which power assets lie in Crimea.
+CONTROL_AREAS: list[dict] = [
+    {
+        "name": "Крим (з 2014)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2014-03-18",
+        "source": "crimea",
+        "note": "Резолюція ГА ООН 68/262; енергосистема Криму відокремлена від України з 2015 року",
+        "wkt": (
+            "POLYGON((32.40 45.30, 33.40 46.05, 33.60 46.13, 33.80 46.13, 34.30 45.95, "
+            "34.80 46.03, 35.10 45.70, 35.40 45.45, 36.70 45.50, 36.70 44.30, 33.30 44.30, "
+            "32.40 45.30))"
+        ),
+    },
 ]
 
 
@@ -72,12 +151,8 @@ SCENARIOS: list[dict] = [
                 "label": "АЕС автоматично відключено захистом від мережі", "payload": {"repair_hours": [20, 30, 48]},
                 "source_url": SOURCES["iaea_20221123"],
             },
-            {
-                "at": "2024-06-01T00:00:00Z", "type": "rule_strike",
-                "label": "Хвилі ударів березня–серпня 2024 по ТЕС і ГЕС (умовні цілі: 8 станцій ≥ 200 МВт)",
-                "payload": {"selector": {"kind": "plant", "countries": ["UA"], "fuels": ["coal", "gas", "hydro"], "min_mw": 200, "count": 8}, "capacity_share": 0.6},
-                "source_url": SOURCES["ohchr_2024"],
-            },
+            _waves_2022("2022-11-15T00:00:00Z"),
+            _recovery_2023("2023-02-12T00:00:00Z"),
             {
                 "at": "2025-11-30T00:00:00Z", "type": "rule_strike",
                 "label": "Хвилі ударів жовтня–листопада 2025 (умовні цілі: 10 станцій ≥ 100 МВт)",
@@ -90,6 +165,11 @@ SCENARIOS: list[dict] = [
                 {
                     "metric": "unserved_mw", "country": "UA", "at": "2026-01-27T17:00:00Z", "value": 7000,
                     "tolerance": 0.4, "label": "Дефіцит у пік: потреба ~18 ГВт, доступно ~11 ГВт (січень 2026)",
+                    "source_url": SOURCES["ohchr_jan_2026"],
+                },
+                {
+                    "metric": "available_mw", "at": "2026-01-27T17:00:00Z", "value": 11000,
+                    "tolerance": 0.25, "label": "Доступна генерація у пік ~11 ГВт (січень 2026)",
                     "source_url": SOURCES["ohchr_jan_2026"],
                 },
             ]
@@ -109,9 +189,10 @@ SCENARIOS: list[dict] = [
         "countries": ["UA", "MD"],
         "as_of": "2022-11-01",
         "start_at": "2022-11-23T06:00:00Z",
-        "end_at": "2022-11-27T06:00:00Z",
+        "end_at": "2022-12-01T06:00:00Z",
         "step_hours": 1,
         "events": [
+            _waves_2022("2022-11-23T06:00:00Z"),
             {
                 "at": "2022-11-23T13:30:00Z", "type": "rule_strike",
                 "label": "Удар по мережі (умовні цілі: 10 підстанцій 330–750 кВ)",
@@ -127,6 +208,17 @@ SCENARIOS: list[dict] = [
         "uncertainty": {"members": 50},
         "expected": {
             "checks": [
+                {
+                    "metric": "unserved_share", "at": "2022-11-24T10:00:00Z", "value": 0.5,
+                    "tolerance": 0.3, "label": "24.11: власна генерація покриває ~50% потреби",
+                    "source_url": SOURCES["nov_24_2022"],
+                },
+                {
+                    "metric": "unserved_share", "at": "2022-11-30T09:00:00Z", "value": 0.27,
+                    "tolerance": 0.3, "label": "30.11, 11:00: дефіцит потужності 27% (Укренерго)",
+                    "role": "calibration",
+                    "source_url": SOURCES["nov_30_2022"],
+                },
                 {
                     "metric": "unserved_share", "at": "2022-11-23T15:00:00Z", "value": 0.5, "op": "min",
                     "label": "Знеструмлено більшу частину споживачів (≥ 50%)", "source_url": SOURCES["iaea_20221123"],
@@ -158,6 +250,27 @@ SCENARIOS: list[dict] = [
         "sources": [],
     },
 ]
+
+
+def seed_control_areas(engine: Engine) -> int:
+    added = 0
+    with engine.begin() as connection:
+        for area in CONTROL_AREAS:
+            added += connection.execute(
+                text(
+                    "INSERT INTO odbl.grid_control_areas (name, country, controlled_by, valid_from, "
+                    "geom, source_url, note) VALUES (:name, :country, :by, :since, "
+                    "ST_GeomFromText(:wkt, 4326), :url, :note) ON CONFLICT (name) DO UPDATE SET "
+                    "geom = EXCLUDED.geom, valid_from = EXCLUDED.valid_from, "
+                    "source_url = EXCLUDED.source_url, note = EXCLUDED.note"
+                ),
+                {
+                    "name": area["name"], "country": area["country"], "by": area["controlled_by"],
+                    "since": area["valid_from"], "wkt": area["wkt"], "url": SOURCES[area["source"]],
+                    "note": area["note"],
+                },
+            ).rowcount
+    return added
 
 
 def seed_grid_overrides(engine: Engine) -> int:
@@ -224,5 +337,6 @@ def seed_grid_scenarios(engine: Engine) -> int:
                 },
             )
     if engine.dialect.name == "postgresql":
+        seed_control_areas(engine)
         seed_grid_overrides(engine)
     return len(SCENARIOS)
