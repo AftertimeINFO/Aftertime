@@ -58,6 +58,12 @@ SOURCES = {
     "dtek_80": "https://www.pravda.com.ua/eng/news/2024/04/3/7449397",
     "centrenergo_100": "https://komersant.ua/en/chornyy-den-tsentrenerho-vtratyla-100-heneratsii-2/",
     "crimea": "https://digitallibrary.un.org/record/767565",
+    # Law 2268-VIII: the occupied parts of Donetsk and Luhansk oblasts (2014–2022).
+    "ordlo": "https://zakon.rada.gov.ua/laws/show/2268-19",
+    # Order of the Ministry for Reintegration No. 309: territories occupied since 2022 with
+    # the dates their occupation began and ended, community by community.
+    "occupied_2022": "https://zakon.rada.gov.ua/laws/show/z1668-22",
+    "kurakhove_2025": "https://kyivindependent.com/russia-claims-to-capture-kurakhove",
     "ohchr_jan_2026": "https://ukraine.ohchr.org/sites/default/files/2026-02/Ukraine%20-%20protection%20of%20civilians%20in%20armed%20conflict%20%28January%202026%29_ENG.pdf",
 }
 
@@ -101,9 +107,12 @@ def _recovery_2023(at: str) -> dict:
         "source_url": SOURCES["no_deficit_2023"],
     }
 
-# Territory outside the control of Ukrenergo: its assets leave the Ukrainian system. The
-# outline is a coarse polygon of the peninsula (cut along the isthmuses), enough to tell
-# which power assets lie in Crimea.
+# Territory outside the control of Ukrenergo: while an area is in force its assets leave the
+# Ukrainian system. The outlines are coarse polygons (about 5–10 km along the front line,
+# after the ISW and DeepState maps), enough to tell which substations and plants lie in the
+# area; the dates come from the sources. Only Ukrainian assets are matched, so an outline may
+# run into Russia or the sea. Areas may overlap: a bus is outside control while any area
+# containing it is in force.
 CONTROL_AREAS: list[dict] = [
     {
         "name": "Крим (з 2014)",
@@ -116,6 +125,120 @@ CONTROL_AREAS: list[dict] = [
             "POLYGON((32.40 45.30, 33.40 46.05, 33.60 46.13, 33.80 46.13, 34.30 45.95, "
             "34.80 46.03, 35.10 45.70, 35.40 45.45, 36.70 45.50, 36.70 44.30, 33.30 44.30, "
             "32.40 45.30))"
+        ),
+    },
+    {
+        "name": "Окуповані частини Донеччини й Луганщини (з 2015)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2015-02-20",
+        "source": "ordlo",
+        "note": "Лінія розмежування після Дебальцевого (лютий 2015); Закон 2268-VIII",
+        "wkt": (
+            "POLYGON((41.50 48.80, 39.60 48.62, 39.25 48.70, 38.60 48.66, 38.45 48.58, "
+            "38.35 48.45, 38.25 48.38, 38.10 48.37, 37.95 48.30, 37.85 48.20, 37.82 48.15, "
+            "37.70 48.05, 37.62 47.97, 37.62 47.85, 37.60 47.78, 37.65 47.65, 37.75 47.50, "
+            "37.85 47.30, 37.85 47.05, 41.50 46.80, 41.50 48.80))"
+        ),
+    },
+    {
+        "name": "Південь і Приазов’я (з березня 2022)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2022-03-04",
+        "source": "occupied_2022",
+        "note": (
+            "Лівобережжя Херсонщини, південь Запоріжжя (Енергодар — 04.03.2022), Приазов’я; "
+            "Маріуполь у блокаді з 02.03 й окупований 20.05.2022"
+        ),
+        "wkt": (
+            "POLYGON((31.55 46.50, 32.05 46.50, 32.40 46.56, 32.62 46.605, 32.76 46.66, "
+            "32.95 46.70, 33.15 46.74, 33.38 46.79, 33.60 46.93, 33.90 47.12, 34.15 47.33, "
+            "34.40 47.53, 34.65 47.57, 35.00 47.60, 35.30 47.52, 35.45 47.48, 35.80 47.46, "
+            "36.25 47.57, 36.55 47.70, 36.85 47.78, 37.20 47.72, 37.60 47.78, 37.80 47.80, "
+            "41.50 47.80, 41.50 45.80, 36.00 45.80, 32.50 45.90, 31.40 46.20, 31.55 46.50))"
+        ),
+    },
+    {
+        "name": "Північ Луганщини (з березня 2022)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2022-03-01",
+        "source": "occupied_2022",
+        "note": "Старобільськ, Сватове, Щастя (Луганська ТЕС — 01.03.2022)",
+        "wkt": (
+            "POLYGON((38.00 50.50, 38.05 49.25, 38.50 49.15, 38.80 49.05, 38.85 48.95, "
+            "39.10 48.75, 39.60 48.60, 41.50 48.60, 41.50 50.50, 38.00 50.50))"
+        ),
+    },
+    {
+        "name": "Сєвєродонецьк, Лисичанськ, Попасна (з липня 2022)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2022-07-03",
+        "source": "occupied_2022",
+        "note": "Кремінна, Рубіжне, Попасна, Світлодарськ — квітень–травень, Лисичанськ — 03.07.2022",
+        "wkt": (
+            "POLYGON((38.05 49.25, 38.15 49.10, 38.28 48.90, 38.25 48.80, 38.20 48.65, "
+            "38.15 48.50, 38.20 48.40, 38.60 48.55, 39.20 48.80, 38.85 49.10, 38.50 49.20, "
+            "38.05 49.25))"
+        ),
+    },
+    {
+        "name": "Херсонщина, правобережжя (березень — листопад 2022)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2022-03-02",
+        "valid_to": "2022-11-11",
+        "source": "occupied_2022",
+        "note": "Херсон окуповано 02.03.2022, звільнено 11.11.2022",
+        "wkt": (
+            "POLYGON((31.90 46.60, 32.05 46.72, 32.45 46.85, 32.70 47.15, 33.10 47.30, "
+            "33.45 47.52, 33.60 47.51, 33.62 47.45, 33.80 47.45, 33.95 47.52, 34.05 47.45, 33.90 47.12, 33.60 46.93, 33.38 46.79, "
+            "33.15 46.74, 32.95 46.70, 32.76 46.66, 32.62 46.605, 32.40 46.56, 32.05 46.50, "
+            "31.90 46.60))"
+        ),
+    },
+    {
+        "name": "Схід Харківщини й Лиман (березень — вересень 2022)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2022-03-01",
+        "valid_to": "2022-09-11",
+        "source": "occupied_2022",
+        "note": "Куп’янськ, Ізюм, Балаклія, Вовчанськ; звільнено у вересні 2022 (Лиман — 01.10.2022)",
+        "wkt": (
+            "POLYGON((36.00 50.50, 36.25 50.20, 36.45 50.08, 36.65 49.95, 36.80 49.80, "
+            "36.70 49.55, 36.95 49.30, 37.00 49.10, 37.35 49.05, 37.65 48.95, 37.90 48.95, "
+            "38.05 49.25, 38.00 50.50, 36.00 50.50))"
+        ),
+    },
+    {
+        "name": "Північ Київщини (лютий — квітень 2022)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2022-02-25",
+        "valid_to": "2022-04-02",
+        "source": "occupied_2022",
+        "note": "Чорнобильська зона, Іванків, Бородянка, Буча, Гостомель; Чернігівщину й Сумщину не задано",
+        "wkt": (
+            "POLYGON((29.30 52.50, 29.30 50.55, 29.80 50.42, 30.10 50.48, 30.22 50.54, "
+            "30.35 50.58, 30.45 50.70, 30.45 51.10, 30.55 51.30, 30.60 52.50, 29.30 52.50))"
+        ),
+    },
+    {
+        "name": "Донеччина: Авдіївка — Курахове (2024 — січень 2025)",
+        "country": "UA",
+        "controlled_by": "UA-OCC",
+        "valid_from": "2025-01-06",
+        "source": "kurakhove_2025",
+        "note": (
+            "Втрачалося поступово: Авдіївка — 17.02.2024, Вугледар — 01.10.2024, Курахове — "
+            "06.01.2025 (дата зони); лінію фронту після січня 2025 не відстежено"
+        ),
+        "wkt": (
+            "POLYGON((37.95 48.30, 37.25 48.22, 37.20 48.05, 37.15 47.95, 37.10 47.80, "
+            "37.20 47.72, 37.60 47.78, 37.62 47.97, 37.82 48.15, 37.95 48.30))"
         ),
     },
 ]
@@ -259,15 +382,15 @@ def seed_control_areas(engine: Engine) -> int:
             added += connection.execute(
                 text(
                     "INSERT INTO odbl.grid_control_areas (name, country, controlled_by, valid_from, "
-                    "geom, source_url, note) VALUES (:name, :country, :by, :since, "
-                    "ST_GeomFromText(:wkt, 4326), :url, :note) ON CONFLICT (name) DO UPDATE SET "
-                    "geom = EXCLUDED.geom, valid_from = EXCLUDED.valid_from, "
+                    "valid_to, geom, source_url, note) VALUES (:name, :country, :by, :since, :until, "
+                    "ST_MakeValid(ST_GeomFromText(:wkt, 4326)), :url, :note) ON CONFLICT (name) DO UPDATE SET "
+                    "geom = EXCLUDED.geom, valid_from = EXCLUDED.valid_from, valid_to = EXCLUDED.valid_to, "
                     "source_url = EXCLUDED.source_url, note = EXCLUDED.note"
                 ),
                 {
                     "name": area["name"], "country": area["country"], "by": area["controlled_by"],
-                    "since": area["valid_from"], "wkt": area["wkt"], "url": SOURCES[area["source"]],
-                    "note": area["note"],
+                    "since": area["valid_from"], "until": area.get("valid_to"), "wkt": area["wkt"],
+                    "url": SOURCES[area["source"]], "note": area["note"],
                 },
             ).rowcount
     return added

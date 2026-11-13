@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FUEL_COLOR, FUEL_LABEL, VOLTAGE_CLASSES } from "./format";
+import { OCCUPIED_COLOR } from "./mapStyle";
 
 const LOAD_STOPS = [
   { color: "#3fbf7f", label: "< 70%" },
@@ -42,6 +43,7 @@ export default function Legend({ simulation }: { simulation: boolean }) {
                 <div key={s.label} className="en-legend-row"><i className="en-legend-line" style={{ background: s.color }} />{s.label}</div>
               ))}
               <div className="en-legend-row"><i className="en-legend-line" style={{ background: "#5b6763" }} />Відключено / знеструмлено</div>
+              <div className="en-legend-row" title="Окупована територія на показану дату: її об'єкти й споживачі не входять до енергосистеми, це не відключення."><i className="en-legend-line" style={{ background: OCCUPIED_COLOR }} />Поза контролем оператора</div>
               <div className="en-legend-row"><i className="en-legend-dot hit" />Ціль події</div>
             </>
           ) : (

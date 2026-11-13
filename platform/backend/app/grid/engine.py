@@ -60,10 +60,8 @@ DEFAULT_AVAILABILITY = 0.5
 SEPARATIONS: list[tuple[frozenset[str], date, str]] = [
     (frozenset({"UA", "RU"}), date(2022, 2, 24), "UA відокремлено від ОЕС Росії"),
     (frozenset({"UA", "BY"}), date(2022, 2, 24), "UA відокремлено від ОЕС Білорусі"),
-    # Assets in a control area (grid_control_areas) carry its code instead of the country.
-    (frozenset({"UA", "UA-OCC"}), date(2014, 1, 1), "Окуповані території поза енергосистемою України"),
-    (frozenset({"MD", "UA-OCC"}), date(2014, 1, 1), "Окуповані території поза енергосистемою Молдови"),
 ]
+# Territory outside the operator's control is not a separation: see ``control``.
 
 
 def hour_factor(hour: int) -> float:
@@ -132,6 +130,9 @@ class Network:
     asset_buses: dict[int, list[int]] = field(default_factory=dict)
     asset_branches: dict[int, list[int]] = field(default_factory=dict)
     asset_gens: dict[int, list[int]] = field(default_factory=dict)
+    # Control areas: the ids each bus lies in, and the areas with their dates.
+    bus_areas: list[tuple[int, ...]] = field(default_factory=list)
+    areas: dict[int, dict] = field(default_factory=dict)
 
     @property
     def countries(self) -> list[str]:
@@ -147,9 +148,15 @@ def load_network(engine: Engine, snapshot_id: int) -> Network:
         buses = connection.execute(
             text(
                 "SELECT id, coalesce(asset_id, -1) AS asset_id, coalesce(country, '') AS country, "
-                "voltage_kv, lon, lat FROM odbl.grid_buses WHERE snapshot_id = :s ORDER BY id"
+                "voltage_kv, lon, lat, areas FROM odbl.grid_buses WHERE snapshot_id = :s ORDER BY id"
             ),
             {"s": snapshot_id},
+        ).all()
+        areas = connection.execute(
+            text(
+                "SELECT id, name, controlled_by, valid_from, valid_to, source_url "
+                "FROM odbl.grid_control_areas ORDER BY id"
+            )
         ).all()
         branches = connection.execute(
             text(
@@ -196,6 +203,8 @@ def load_network(engine: Engine, snapshot_id: int) -> Network:
         load_bus=np.array([index[load.bus_id] for load in loads], dtype=np.int64),
         load_share=np.array([load.share for load in loads]),
         load_country=[load.country for load in loads],
+        bus_areas=[tuple(b.areas or ()) for b in buses],
+        areas={a.id: a._asdict() for a in areas},
     )
     for i, asset in enumerate(net.bus_asset):
         if asset >= 0:
@@ -229,6 +238,10 @@ class State:
     balancing_ratio: np.ndarray | None = None
     # Capacity of running units, MW (unit commitment); None: everything available runs.
     committed: np.ndarray | None = None
+    # Buses in territory outside the operator's control (see ``control``) and the load
+    # shares spread over the territory still controlled; None: no control area in force.
+    occupied: np.ndarray | None = None
+    load_share: np.ndarray | None = None
     ens_mwh: float = 0.0
     previous_unserved: float = 0.0
 
@@ -242,6 +255,44 @@ class State:
             gen_capacity=net.gen_pmax.copy(),
             rating=net.br_rating.copy(),
         )
+
+
+def areas_in_force(net: Network, day: date) -> set[int]:
+    return {
+        area_id for area_id, area in net.areas.items()
+        if area["valid_from"] <= day and (area["valid_to"] is None or area["valid_to"] > day)
+    }
+
+
+def control(net: Network, state: State, day: date) -> set[int]:
+    """Put the control areas in force on ``day``: their buses, plants and loads leave the
+    system, and each country's demand is spread over the territory it still controls (the
+    national demand profile describes controlled territory). Returns the areas in force."""
+    active = areas_in_force(net, day)
+    occupied = np.array([bool(active.intersection(ids)) for ids in net.bus_areas], dtype=bool)
+    if len(occupied) != len(net.bus_id):
+        occupied = np.zeros(len(net.bus_id), dtype=bool)
+    state.occupied = occupied
+    share = net.load_share.copy()
+    lost = occupied[net.load_bus]
+    share[lost] = 0.0
+    countries = np.array(net.load_country)
+    for country in set(net.load_country):
+        mine = countries == country
+        kept = share[mine].sum()
+        if kept > 0:
+            share[mine] *= net.load_share[mine].sum() / kept
+    state.load_share = share
+    return active
+
+
+def live_buses(state: State) -> np.ndarray:
+    """Buses in service and in controlled territory."""
+    return state.bus_up if state.occupied is None else state.bus_up & ~state.occupied
+
+
+def load_shares(net: Network, state: State) -> np.ndarray:
+    return net.load_share if state.load_share is None else state.load_share
 
 
 def separation_mask(net: Network, pairs: set[frozenset[str]]) -> np.ndarray:
@@ -305,6 +356,9 @@ def commitment_target(net: Network, state: State, moment: datetime) -> np.ndarra
     """Running capacity each generator should have: per country, merit order up to demand
     plus reserve, net of the unmodelled supply."""
     avail = _available(net, state, moment, committed=False)
+    if state.occupied is not None:
+        avail = np.where(state.occupied[net.gen_bus], 0.0, avail)
+    shares = load_shares(net, state)
     target = np.zeros(len(net.gen_pmax))
     rank = {fuel: k for k, fuel in enumerate(MERIT_ORDER)}
     gen_country = [net.bus_country[b] for b in net.gen_bus]
@@ -315,7 +369,7 @@ def commitment_target(net: Network, state: State, moment: datetime) -> np.ndarra
         covered = 0.0
         if state.balancing_ratio is not None:
             mine = load_country == country
-            covered = float((state.balancing_ratio[net.load_bus[mine]] * net.load_share[mine]).sum())
+            covered = float((state.balancing_ratio[net.load_bus[mine]] * shares[mine]).sum())
         need = max(0.0, demand * (1 + SPINNING_RESERVE - covered))
         order = sorted(
             (i for i, c in enumerate(gen_country) if c == country),
@@ -351,8 +405,9 @@ def solve(
         c: demand_mw(c, moment) * state.demand_factor.get(c, 1.0) for c in net.countries
     }
     bus_demand = np.zeros(n)
+    bus_up = live_buses(state)
     load_mw = np.array(
-        [demand_by_country.get(c, 0.0) * s for c, s in zip(net.load_country, net.load_share, strict=True)]
+        [demand_by_country.get(c, 0.0) * s for c, s in zip(net.load_country, load_shares(net, state), strict=True)]
     )
     np.add.at(bus_demand, net.load_bus, load_mw)
     avail = _available(net, state, moment)
@@ -366,21 +421,21 @@ def solve(
     while True:
         iterations += 1
         active = state.br_up & ~state.br_tripped & ~separated
-        active &= state.bus_up[net.br_from] & state.bus_up[net.br_to]
+        active &= bus_up[net.br_from] & bus_up[net.br_to]
         f, t = net.br_from[active], net.br_to[active]
         graph = coo_matrix((np.ones(len(f)), (f, t)), shape=(n, n))
         count, labels = connected_components(graph, directed=False)
         gen_bus_avail = np.zeros(n)
-        live_gen = state.bus_up[net.gen_bus]
+        live_gen = bus_up[net.gen_bus]
         np.add.at(gen_bus_avail, net.gen_bus[live_gen], avail[live_gen])
-        gen_bus_avail += balancing * state.bus_up
-        island_avail = np.bincount(labels, weights=gen_bus_avail * state.bus_up, minlength=count)
-        island_demand = np.bincount(labels, weights=bus_demand * state.bus_up, minlength=count)
+        gen_bus_avail += balancing * bus_up
+        island_avail = np.bincount(labels, weights=gen_bus_avail * bus_up, minlength=count)
+        island_demand = np.bincount(labels, weights=bus_demand * bus_up, minlength=count)
         with np.errstate(divide="ignore", invalid="ignore"):
             served_ratio = np.where(island_demand > 0, np.minimum(1.0, island_avail / island_demand), 1.0)
             dispatch_ratio = np.where(island_avail > 0, np.minimum(1.0, island_demand / island_avail), 0.0)
-        bus_served = bus_demand * served_ratio[labels] * state.bus_up
-        bus_gen = gen_bus_avail * dispatch_ratio[labels] * state.bus_up
+        bus_served = bus_demand * served_ratio[labels] * bus_up
+        bus_gen = gen_bus_avail * dispatch_ratio[labels] * bus_up
         injection = (bus_gen - bus_served) / BASE_MVA
         theta = np.zeros(n)
         # Solve each island with load or generation; slack = bus with most generation.
@@ -422,25 +477,25 @@ def solve(
         tripped_now.extend(int(i) for i in worst)
 
     gen_dispatch = np.zeros(len(net.gen_pmax))
-    gen_ratio = dispatch_ratio[labels[net.gen_bus]] * state.bus_up[net.gen_bus]
+    gen_ratio = dispatch_ratio[labels[net.gen_bus]] * bus_up[net.gen_bus]
     gen_dispatch[:] = avail * gen_ratio
     by_country: dict[str, dict[str, float]] = defaultdict(lambda: {"demand_mw": 0.0, "served_mw": 0.0})
     for k, c in enumerate(net.load_country):
         bus = net.load_bus[k]
         share = load_mw[k]
-        ratio = served_ratio[labels[bus]] if state.bus_up[bus] else 0.0
+        ratio = served_ratio[labels[bus]] if bus_up[bus] else 0.0
         by_country[c]["demand_mw"] += share
         by_country[c]["served_mw"] += share * ratio
     demand_total = float(bus_demand.sum())
     served_total = float(bus_served.sum())
-    bus_ratio = np.where(state.bus_up, served_ratio[labels], 0.0)
+    bus_ratio = np.where(bus_up, served_ratio[labels], 0.0)
     supplied = bus_ratio > 0.999
     energised = int(np.unique(labels[(island_demand[labels] > 0) & (island_avail[labels] > 0)]).size)
     return Solution(
         unserved_mw=demand_total - served_total,
         demand_mw=demand_total,
         served_mw=served_total,
-        generation_mw=float(gen_dispatch.sum() + (balancing * dispatch_ratio[labels] * state.bus_up).sum()),
+        generation_mw=float(gen_dispatch.sum() + (balancing * dispatch_ratio[labels] * bus_up).sum()),
         available_mw=float(island_avail.sum()),
         islands=energised,
         tripped=tripped_now,
@@ -466,6 +521,9 @@ def secure_base_case(net: Network, state: State, moment: datetime) -> dict:
     n = len(net.bus_id)
     ratio = np.zeros(n)
     avail = _available(net, state, moment, committed=False)
+    if state.occupied is not None:
+        avail = np.where(state.occupied[net.gen_bus], 0.0, avail)
+    shares = load_shares(net, state)
     report: dict = {"balancing_mw": {}, "isolated_load_mw": 0, "ratings_raised": 0}
     load_country = np.array(net.load_country)
     for country in net.countries:
@@ -479,14 +537,14 @@ def secure_base_case(net: Network, state: State, moment: datetime) -> dict:
     state.balancing_ratio = ratio
     commit(net, state, moment, None)
     first = solve(net, state, moment, trip_threshold=float("inf"))
-    isolated = ~first.bus_supplied & state.bus_up
+    isolated = ~first.bus_supplied & live_buses(state)
     if isolated.any():
         demand = np.zeros(n)
         demand_by_country = {c: demand_mw(c, moment) for c in net.countries}
         np.add.at(
             demand,
             net.load_bus,
-            np.array([demand_by_country.get(c, 0.0) * s for c, s in zip(net.load_country, net.load_share, strict=True)]),
+            np.array([demand_by_country.get(c, 0.0) * s for c, s in zip(net.load_country, shares, strict=True)]),
         )
         ratio[isolated] = np.maximum(ratio[isolated], 1.05)
         report["isolated_load_mw"] = round(float(demand[isolated].sum()))

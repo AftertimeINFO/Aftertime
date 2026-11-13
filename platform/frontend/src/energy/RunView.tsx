@@ -30,7 +30,7 @@ export function KpiStrip({ frame, previous }: { frame: Frame; previous?: Frame }
         label="Відключено елементів"
         value={fmtCount(m.out_branches + m.tripped + m.out_buses)}
         note={`${m.tripped} захистом · ${m.islands} ${m.islands === 1 ? "острів" : "острови"}`}
-        hint="Лінії й підстанції поза роботою: уражені подіями та відключені захистом від перевантаження (каскад)."
+        hint={`Лінії й підстанції поза роботою: уражені подіями та відключені захистом від перевантаження (каскад).${m.occupied_buses ? ` Окуповану територію (${fmtCount(m.occupied_buses)} вузлів мережі) сюди не зараховано: її об'єкти й споживачі не входять до енергосистеми.` : ""}`}
       />
     </div>
   );

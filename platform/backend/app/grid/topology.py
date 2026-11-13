@@ -95,7 +95,7 @@ class SnapshotParams:
             "snap_m": self.snap_m,
             "plant_reach_m": self.plant_reach_m,
             "big_plant_reach_m": self.big_plant_reach_m,
-            "builder": 4,
+            "builder": 5,
         }
 
 
@@ -122,24 +122,12 @@ EXISTED = r"""
     )
 """
 
-# Territory outside the operator's control on the date: the area's code replaces the country.
-CONTROL = """
-LEFT JOIN LATERAL (
-    SELECT c.controlled_by FROM odbl.grid_control_areas c
-    WHERE c.country = a.country AND c.valid_from <= :as_of
-      AND (c.valid_to IS NULL OR c.valid_to > :as_of)
-      AND ST_Intersects(c.geom, ST_PointOnSurface(a.geom))
-    LIMIT 1
-) ca ON true
-"""
-
 STATIONS_SQL = f"""
 CREATE TEMP TABLE snap_stations ON COMMIT DROP AS
-SELECT a.id, a.kind, a.max_voltage_kv, a.voltages_kv, coalesce(ca.controlled_by, a.country) AS country,
+SELECT a.id, a.kind, a.max_voltage_kv, a.voltages_kv, a.country,
        a.capacity_mw, a.fuel, a.geom, a.geom_3857, ST_X(ST_PointOnSurface(a.geom)) AS lon,
        ST_Y(ST_PointOnSurface(a.geom)) AS lat
 FROM odbl.grid_assets a
-{CONTROL}
 WHERE a.kind IN ('substation', 'converter', 'plant') AND {EXISTED}
   AND (
     a.kind = 'plant'
@@ -151,11 +139,10 @@ WHERE a.kind IN ('substation', 'converter', 'plant') AND {EXISTED}
 LINES_SQL = f"""
 CREATE TEMP TABLE snap_lines ON COMMIT DROP AS
 SELECT a.id, a.kind, a.max_voltage_kv, a.voltages_kv, a.circuits, a.cables, a.frequency_hz,
-       coalesce(ca.controlled_by, a.country) AS country, coalesce(a.length_km, ST_Length(a.geom::geography) / 1000) AS length_km,
+       a.country, coalesce(a.length_km, ST_Length(a.geom::geography) / 1000) AS length_km,
        a.geom, a.geom_3857,
        ST_StartPoint(a.geom) AS p0, ST_EndPoint(a.geom) AS p1
 FROM odbl.grid_assets a
-{CONTROL}
 WHERE a.kind IN ('line', 'cable') AND GeometryType(a.geom) = 'LINESTRING' AND {EXISTED}
   AND (a.max_voltage_kv >= :min_v OR a.max_voltage_kv IS NULL)
   AND coalesce(a.frequency_hz, 50) <> 16.7
@@ -183,7 +170,8 @@ def _fingerprint(engine: Engine, params: SnapshotParams) -> str:
                 "SELECT (SELECT coalesce(max(id), 0) FROM odbl.grid_import_batches "
                 "WHERE status = 'succeeded'), (SELECT coalesce(max(id), 0) || ':' || count(*) "
                 "FROM odbl.grid_overrides WHERE field IN ('in_service_from', 'out_of_service_from')), "
-                "(SELECT coalesce(max(id), 0) || ':' || count(*) FROM odbl.grid_control_areas)"
+                "(SELECT coalesce(md5(string_agg(id || ':' || country || ':' || md5(ST_AsBinary(geom)), "
+                "',' ORDER BY id)), '') FROM odbl.grid_control_areas)"
             )
         ).one()
     payload = json.dumps({**params.key(), "data": list(map(str, data))}, sort_keys=True)
@@ -556,13 +544,6 @@ def build_snapshot(engine: Engine, params: SnapshotParams, *, force: bool = Fals
                     ) n
                     WHERE d.kind = 'substation' AND d.country = ANY(:countries)
                       AND coalesce(d.max_voltage_kv, 0) < :min_v AND d.status = 'active'
-                      -- Demand density of controlled territory only.
-                      AND NOT EXISTS (
-                          SELECT 1 FROM odbl.grid_control_areas c
-                          WHERE c.country = d.country AND c.valid_from <= :as_of
-                            AND (c.valid_to IS NULL OR c.valid_to > :as_of)
-                            AND ST_Intersects(c.geom, d.geom)
-                      )
                     GROUP BY n.id
                     """
                 ),
@@ -591,7 +572,28 @@ def build_snapshot(engine: Engine, params: SnapshotParams, *, force: bool = Fals
                     load_rows,
                 )
 
+            # Control areas of any date each bus lies in: a run puts them in force by date.
+            in_areas = connection.execute(
+                text(
+                    """
+                    UPDATE odbl.grid_buses b SET areas = sub.ids
+                    FROM (
+                        SELECT b2.id, array_agg(c.id ORDER BY c.id) AS ids
+                        FROM odbl.grid_buses b2
+                        JOIN odbl.grid_control_areas c
+                          ON c.country = b2.country
+                         AND ST_Intersects(c.geom, ST_SetSRID(ST_MakePoint(b2.lon, b2.lat), 4326))
+                        WHERE b2.snapshot_id = :s
+                        GROUP BY b2.id
+                    ) sub
+                    WHERE b.id = sub.id
+                    """
+                ),
+                {"s": snapshot_id},
+            ).rowcount
+
             stats = {
+                "buses_in_control_areas": in_areas,
                 "buses": len(bus_rows),
                 "branches": len(branches),
                 "transformers": transformers,

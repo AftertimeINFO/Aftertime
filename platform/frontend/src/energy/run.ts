@@ -5,13 +5,13 @@ import { request } from "../api";
 export type Metrics = {
   demand_mw: number; served_mw: number; unserved_mw: number; unserved_share: number;
   generation_mw: number; available_mw: number; islands: number; frequency_hz: number;
-  tripped: number; tripped_now: number; out_branches: number; out_buses: number; overloaded: number;
+  tripped: number; tripped_now: number; out_branches: number; out_buses: number; overloaded: number; occupied_buses?: number;
   ens_mwh: number; by_country: Record<string, { demand_mw: number; served_mw: number }>;
 };
 export type FrameEvent = { at: string; type: string; label: string; targets: number[]; source_url: string | null; event_id: string | null; origin: string };
 export type Frame = {
   sequence: number; at: string; metrics: Metrics;
-  state: { load: number[]; br_out: number[]; br_trip: number[]; bus_out: number[]; bus_dead: number[]; gen_out: number[]; trip_new: number[] };
+  state: { load: number[]; br_out: number[]; br_trip: number[]; bus_out: number[]; bus_dead: number[]; gen_out: number[]; trip_new: number[]; bus_occ?: number[]; br_occ?: number[] };
   events: FrameEvent[];
 };
 export type Band = { p10: number; p50: number; p90: number };
@@ -65,18 +65,23 @@ export type FeatureStates = {
   plants: Map<number, Record<string, unknown>>;
 };
 
-/** Feature-states of one frame: line loading and outages, dead substations, lost plants, event targets. */
+/** Feature-states of one frame: line loading and outages, dead substations, lost plants, event
+ * targets, and territory outside the operator's control (``occ``: not an outage). */
 export function frameStates(network: SnapshotNetwork, frame: Frame, plantAssets: Set<number> = new Set()): FeatureStates {
   const lines = new Map<number, Record<string, unknown>>();
   const substations = new Map<number, Record<string, unknown>>();
   const plants = new Map<number, Record<string, unknown>>();
   const down = new Set([...frame.state.br_out, ...frame.state.br_trip]);
+  const occupiedBranches = new Set(frame.state.br_occ ?? []);
+  const occupiedBuses = new Set(frame.state.bus_occ ?? []);
   frame.state.load.forEach((pct, index) => {
     const branch = network.branches[index];
     if (!branch || branch[0] === "transformer") return;
     for (const asset of branch[1]) {
       const current = lines.get(asset);
-      if (down.has(index) || pct < 0) lines.set(asset, { off: true, load: null });
+      if (occupiedBranches.has(index)) {
+        if (!current) lines.set(asset, { off: false, occ: true, load: null });
+      } else if (down.has(index) || pct < 0) lines.set(asset, { off: true, load: null });
       else if (!current || (current.load as number) < pct / 100) lines.set(asset, { off: false, load: pct / 100 });
     }
   });
@@ -88,13 +93,14 @@ export function frameStates(network: SnapshotNetwork, frame: Frame, plantAssets:
     busesOf.set(bus[0], [...(busesOf.get(bus[0]) ?? []), index]);
   });
   for (const [asset, indices] of busesOf) {
-    const off = indices.every((i) => deadBuses.has(i));
-    if (plantAssets.has(asset)) plants.set(asset, { off });
-    else substations.set(asset, { off });
+    const occ = indices.every((i) => occupiedBuses.has(i));
+    const off = !occ && indices.every((i) => deadBuses.has(i));
+    if (plantAssets.has(asset)) plants.set(asset, { off, occ });
+    else substations.set(asset, { off, occ });
   }
   for (const index of frame.state.gen_out) {
     const asset = network.generators[index]?.[0];
-    if (asset != null) plants.set(asset, { off: true });
+    if (asset != null && !plants.get(asset)?.occ) plants.set(asset, { off: true, occ: false });
   }
   for (const event of frame.events) {
     for (const target of event.targets) {

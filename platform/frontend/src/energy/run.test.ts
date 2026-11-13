@@ -30,6 +30,13 @@ describe("frame states", () => {
     expect(s.substations.get(102)?.off).toBe(false);
     expect(s.plants.get(301)?.off).toBe(true);
   });
+  it("marks occupied territory apart from outages", () => {
+    const s = frameStates(network, frame({ load: [-1, 10, -1], bus_occ: [2, 3], br_occ: [2], gen_out: [0], bus_dead: [2] }), new Set([301]));
+    expect(s.substations.get(102)).toEqual({ off: false, occ: true });
+    expect(s.plants.get(301)).toEqual({ off: false, occ: true });
+    expect(s.lines.get(203)).toEqual({ off: false, occ: true, load: null });
+    expect(s.lines.get(201)?.off).toBe(true);
+  });
   it("highlights event targets", () => {
     const s = frameStates(network, frame({}, [{ at: "", type: "outage", label: "", targets: [102, 999], source_url: null, event_id: null, origin: "scenario" }]));
     expect(s.substations.get(102)?.hit).toBe(true);

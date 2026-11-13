@@ -55,6 +55,9 @@ export function voltageColorExpr(): Expr {
 
 const widthByVoltage: Expr = ["step", voltage, 0.6, 52, 0.9, 132, 1.2, 220, 1.5, 310, 1.9, 550, 2.4];
 
+/** Territory outside the operator's control in a run (occupation): not an outage. */
+export const OCCUPIED_COLOR = "#8a74b8";
+
 /** Width that grows with zoom; `extra` px is added at every stop (zoom must stay top-level). */
 function zoomed(base: Expr, low = 0.45, high = 2.6, extra = 0): Expr {
   const stop = (k: number): Expr => (extra ? ["+", ["*", k, base], extra] : ["*", k, base]);
@@ -65,6 +68,7 @@ function zoomed(base: Expr, low = 0.45, high = 2.6, extra = 0): Expr {
 function lineColor(): Expr {
   return [
     "case",
+    ["boolean", ["feature-state", "occ"], false], OCCUPIED_COLOR,
     ["boolean", ["feature-state", "off"], false], "#5b6763",
     ["!=", ["feature-state", "load"], null],
     ["interpolate", ["linear"], ["to-number", ["feature-state", "load"]], 0, "#3fbf7f", 0.7, "#c9d34a", 0.9, "#f0bd63", 1.0, "#ff6a3d", 1.2, "#ff2d55"],
@@ -160,7 +164,7 @@ export function powerLayers(tilesUrl: string): { source: maplibregl.SourceSpecif
       source: s,
       "source-layer": "power_substation",
       paint: {
-        "circle-color": ["case", ["boolean", ["feature-state", "off"], false], "#5b6763", voltageColorExpr()],
+        "circle-color": ["case", ["boolean", ["feature-state", "occ"], false], OCCUPIED_COLOR, ["boolean", ["feature-state", "off"], false], "#5b6763", voltageColorExpr()],
         "circle-radius": zoomed(["step", voltage, 1.6, 110, 2.2, 220, 2.8, 330, 3.4, 550, 4.2] as Expr, 0.6, 2.2),
         "circle-stroke-width": ["case", ["boolean", ["feature-state", "selected"], false], 2.5, ["boolean", ["feature-state", "hit"], false], 2.5, 0.8],
         "circle-stroke-color": ["case", ["boolean", ["feature-state", "hit"], false], "#ff2d55", ["boolean", ["feature-state", "selected"], false], "#ffffff", "#07110e"],
@@ -172,7 +176,7 @@ export function powerLayers(tilesUrl: string): { source: maplibregl.SourceSpecif
       source: s,
       "source-layer": "power_plant",
       paint: {
-        "circle-color": ["case", ["boolean", ["feature-state", "off"], false], "#5b6763", fuelColor],
+        "circle-color": ["case", ["boolean", ["feature-state", "occ"], false], OCCUPIED_COLOR, ["boolean", ["feature-state", "off"], false], "#5b6763", fuelColor],
         "circle-radius": [
           "interpolate", ["linear"], ["zoom"],
           3, ["+", 1.5, ["*", 0.05, ["sqrt", ["coalesce", ["get", "cap"], 1]]]],

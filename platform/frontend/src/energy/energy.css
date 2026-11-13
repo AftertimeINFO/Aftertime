@@ -242,6 +242,7 @@ em.status-running, em.status-queued { color: var(--en-warn); }
 .en-events li { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 8px; border-left: 3px solid #ff2d55; background: var(--en-panel-2); border-radius: 0 6px 6px 0; }
 .en-events li.origin-repair { border-left-color: var(--en-ok); }
 .en-events li.origin-override { border-left-color: #8cc4ff; }
+.en-events li.origin-control { border-left-color: #8a74b8; }
 .en-events b { flex-basis: 100%; }
 .en-targets { display: flex; flex-wrap: wrap; gap: 6px; }
 .en-checks tr.ok td:last-child { color: var(--en-ok); }

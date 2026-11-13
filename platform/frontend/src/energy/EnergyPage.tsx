@@ -24,7 +24,7 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
   { id: "scenarios", label: "Сценарії", hint: "Ймовірні інциденти майбутнього" },
 ];
 const LINE_OPACITY_NORMAL = ["case", ["boolean", ["feature-state", "off"], false], 0.75, 0.92];
-const LINE_OPACITY_SIMULATION = ["case", ["!=", ["feature-state", "load"], null], 0.95, ["boolean", ["feature-state", "off"], false], 0.85, 0.16];
+const LINE_OPACITY_SIMULATION = ["case", ["!=", ["feature-state", "load"], null], 0.95, ["boolean", ["feature-state", "occ"], false], 0.5, ["boolean", ["feature-state", "off"], false], 0.85, 0.16];
 const CAPS_KEY = "aftertime.energy.filters";
 
 function readFilters(): PowerFilters {
@@ -171,7 +171,7 @@ export default function EnergyPage() {
     const handle = map.current;
     const instance = handle?.map();
     if (!handle || !instance || !instance.getLayer(LAYER_IDS.line)) return;
-    handle.clearStates(["load", "off", "hit"]);
+    handle.clearStates(["load", "off", "hit", "occ"]);
     instance.setPaintProperty(LAYER_IDS.line, "line-opacity", (simulating ? LINE_OPACITY_SIMULATION : LINE_OPACITY_NORMAL) as maplibregl.ExpressionSpecification);
     if (!simulating) return;
     const frame = frames[index];

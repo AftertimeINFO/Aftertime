@@ -133,8 +133,9 @@ class GridOverride(Base):
 class GridControlArea(Base):
     """Territory outside the control of the system operator from a date (e.g. occupation).
 
-    Assets inside an area valid on a snapshot date get the area's ``controlled_by`` code as
-    their country: they leave the national demand and supply, and branches to them open.
+    A snapshot records which areas each bus lies in; while an area is in force during a run
+    its buses, plants and loads leave the national system and the country's demand is
+    spread over the territory still controlled.
     """
 
     __tablename__ = "grid_control_areas"
@@ -180,6 +181,8 @@ class GridBus(Base):
     role: Mapped[str] = mapped_column(String(20), default="substation")
     lon: Mapped[float] = mapped_column(Float)
     lat: Mapped[float] = mapped_column(Float)
+    # Control areas (of any date) the bus lies in; a run decides by date which are in force.
+    areas: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
     __table_args__ = SCHEMA
 
 

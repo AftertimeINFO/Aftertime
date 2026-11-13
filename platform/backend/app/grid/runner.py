@@ -16,6 +16,10 @@ Event types:
 * ``demand``   — demand factor for ``countries`` (cold spell, heat wave);
 * ``fuel``     — availability factor for a ``fuel`` (gas shortage, low water);
 * ``separate`` / ``resync`` — open or close the branches between ``countries`` (pairs).
+
+Control areas (``odbl.grid_control_areas``) are in force by date: those in force at the start
+shape the system the base case is balanced on; a change during the run (occupation,
+liberation) is an event of type ``control``.
 """
 
 from __future__ import annotations
@@ -34,6 +38,8 @@ from app.grid.engine import (
     State,
     adapt_to_losses,
     commit,
+    control,
+    live_buses,
     load_network,
     secure_base_case,
     solve,
@@ -98,6 +104,7 @@ class Timeline:
             self._add(_moment(event["at"]), event)
         for override in overrides:
             self._override(override, start)
+        self._control_changes(start, _moment(scenario["end_at"]) if scenario.get("end_at") else None)
         self.actions.sort(key=lambda item: (item[0], item[1]))
         self.position = 0
 
@@ -122,6 +129,25 @@ class Timeline:
                 self._push(datetime.combine(end, datetime.min.time(), UTC), {**base, "type": "restore", "label": f"Кінець правки: {field}"})
         elif field in {"capacity_mw", "availability"}:
             self._push(at, {**base, "type": "capacity" if field == "capacity_mw" else "availability", "value": float(value)})
+
+    def _control_changes(self, start: datetime, end: datetime | None) -> None:
+        """Occupation and liberation during the run, for the areas this network touches."""
+        used = sorted({area for ids in self.net.bus_areas for area in ids})
+        for area_id in used:
+            area = self.net.areas.get(area_id)
+            if area is None:
+                continue
+            for day, entering in ((area["valid_from"], True), (area["valid_to"], False)):
+                if day is None:
+                    continue
+                at = datetime.combine(day, datetime.min.time(), UTC)
+                if at <= start or (end is not None and at > end):
+                    continue
+                verb = "поза контролем оператора" if entering else "знову під контролем оператора"
+                self._push(
+                    at,
+                    {"type": "control", "label": f"{area['name']}: {verb}", "targets": [], "source_url": area["source_url"], "origin": "control"},
+                )
 
     def _add(self, at: datetime, event: dict) -> None:
         kind = event.get("type", "outage")
@@ -248,6 +274,8 @@ def apply(net: Network, state: State, action: dict) -> None:
         for fuel in fuels:
             for key in ([f"{fuel}@{c}" for c in countries] if countries else [fuel]):
                 state.fuel_factor[key] = factor
+    elif kind == "control":
+        control(net, state, _moment(action["at"]).date())
     elif kind in {"separate", "resync"}:
         countries = [c.upper() for c in action.get("countries") or []]
         pairs = {frozenset({a, b}) for a in countries for b in countries if a != b}
@@ -292,6 +320,9 @@ def simulate(
     timeline = Timeline(net, scenario, overrides, rng)
     state = State.initial(net)
     state.separated = _base_separations(start.date())
+    # Territory outside the operator's control at the start is not part of the system the
+    # national demand profile describes: it is set aside before the base case.
+    control(net, state, start.date())
     # Balance the undisturbed system under normal conditions first. Everything in force at
     # the start — damage, occupation, demand and fuel conditions — is applied afterwards, so
     # unmodelled supply never covers it and a standing deficit stays visible.
@@ -350,6 +381,7 @@ def simulate(
             "tripped_now": len(solution.tripped),
             "out_branches": int((~state.br_up).sum()),
             "out_buses": int((~state.bus_up).sum()),
+            "occupied_buses": int(state.occupied.sum()) if state.occupied is not None else 0,
             "overloaded": int((solution.loading > 1.0).sum()),
             "ens_mwh": round(state.ens_mwh),
             "by_country": solution.by_country,
@@ -364,7 +396,13 @@ def simulate(
                 "br_trip": np.flatnonzero(state.br_tripped).tolist(),
                 "bus_out": np.flatnonzero(~state.bus_up).tolist(),
                 # Without any supply (an island without generation); partial shedding is a metric.
-                "bus_dead": np.flatnonzero(state.bus_up & (solution.bus_ratio < 0.001)).tolist(),
+                "bus_dead": np.flatnonzero(live_buses(state) & (solution.bus_ratio < 0.001)).tolist(),
+                # Outside the operator's control (occupied territory): not an outage.
+                "bus_occ": np.flatnonzero(state.occupied).tolist() if state.occupied is not None else [],
+                "br_occ": (
+                    np.flatnonzero(state.occupied[net.br_from] | state.occupied[net.br_to]).tolist()
+                    if state.occupied is not None else []
+                ),
                 "gen_out": np.flatnonzero(state.gen_factor <= 0.001).tolist(),
                 "trip_new": solution.tripped,
             }
@@ -626,6 +664,7 @@ def criticality(
     net = load_network(engine, snapshot_id)
     base_state = State.initial(net)
     base_state.separated = _base_separations(moment.date())
+    control(net, base_state, moment.date())
     if scenario is not None:
         timeline = Timeline(net, {**scenario, "start_at": moment}, overrides or [], np.random.default_rng(0))
         secure_base_case(net, base_state, moment)
@@ -635,7 +674,7 @@ def criticality(
     else:
         secure_base_case(net, base_state, moment)
     already_out = {
-        int(net.bus_asset[i]) for i in np.flatnonzero(~base_state.bus_up) if net.bus_asset[i] >= 0
+        int(net.bus_asset[i]) for i in np.flatnonzero(~live_buses(base_state)) if net.bus_asset[i] >= 0
     } | {int(net.gen_asset[i]) for i in np.flatnonzero(base_state.gen_factor <= 0.001)}
     base = solve(net, base_state, moment)
     candidates = sorted(
@@ -651,7 +690,8 @@ def criticality(
             br_tripped=base_state.br_tripped.copy(), gen_factor=base_state.gen_factor.copy(),
             gen_capacity=base_state.gen_capacity.copy(), separated=set(base_state.separated),
             rating=base_state.rating.copy(), balancing_ratio=base_state.balancing_ratio.copy(),
-            committed=base_state.committed.copy(),
+            committed=base_state.committed.copy(), occupied=base_state.occupied,
+            load_share=base_state.load_share,
         )
         apply(net, state, {"type": "outage", "targets": [asset]})
         solution = solve(net, state, moment)

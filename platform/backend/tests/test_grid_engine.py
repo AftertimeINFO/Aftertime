@@ -234,3 +234,26 @@ def test_fuel_limit_can_apply_to_one_country():
     from app.grid.engine import _available
 
     assert _available(net, state, MOMENT, committed=False)[0] == pytest.approx(2000 * 0.55 * 0.5)
+
+
+def test_control_area_moves_demand_to_controlled_territory_and_back():
+    """Occupation takes a bus out of the system without counting its demand as unserved;
+    liberation brings it back (a control event during the run)."""
+    net = network()
+    net.bus_areas = [(), (), (), (7,)]
+    net.areas = {7: {"name": "Зона", "valid_from": date(2024, 1, 16), "valid_to": date(2024, 1, 18), "source_url": "https://example.org"}}
+    scenario = {
+        "start_at": "2024-01-15T17:00:00Z", "end_at": "2024-01-19T17:00:00Z", "step_hours": 24,
+        "events": [{"at": "2024-01-15T17:00:00Z", "type": "demand", "payload": {"countries": ["UA"], "factor": 0.05}}],
+    }
+    result = simulate(net, scenario, [], seed=1)
+    by_day = {f["at"].date(): f for f in result["frames"]}
+    occupied = by_day[date(2024, 1, 16)]
+    assert occupied["state"]["bus_occ"] == [3]
+    assert occupied["metrics"]["unserved_mw"] == 0
+    assert occupied["metrics"]["occupied_buses"] == 1
+    labels = [e["label"] for f in result["frames"] for e in f["events"] if e["type"] == "control"]
+    assert len(labels) == 2 and "знову під контролем" in labels[1]
+    # Demand stays national: what bus 3 drew is now drawn by the controlled buses.
+    assert occupied["metrics"]["demand_mw"] == pytest.approx(by_day[date(2024, 1, 15)]["metrics"]["demand_mw"], rel=0.02)
+    assert by_day[date(2024, 1, 18)]["state"]["bus_occ"] == []

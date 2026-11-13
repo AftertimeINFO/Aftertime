@@ -1,6 +1,6 @@
 ---
 document_id: aftertime.design.grid-incidents
-revision: 2
+revision: 3
 status: draft
 language: en
 canonical: true
@@ -43,11 +43,30 @@ active), `capacity_mw`, `availability`, `in_service_from`, `out_of_service_from`
 `controlled_by`. Every correction MUST have a source URL. Overrides become events
 of every run, historical or what-if.
 
-Control areas are territories outside the operator's control from a date (for
-example Crimea from 2014). Assets inside an area valid on the snapshot date take
-the area's code instead of the country: they leave the national demand and
-supply, and branches to them are open. Demand density is computed from
-controlled territory only.
+Control areas are territories outside the operator's control between two dates
+(occupation and, where it happened, liberation). A snapshot records which areas
+each bus lies in; a run puts the areas in force by date. Areas in force at the
+start are set aside before the base case is balanced, because the national
+demand profile describes controlled territory. An area that changes during the
+run is a `control` event. While an area is in force, its buses, plants and
+lines leave the system, and the country's demand is spread over the territory
+it still controls. This is not counted as an outage: the map shows it in its
+own colour.
+
+Areas of the pilot (coarse outlines, about 5–10 km along the front line, dates
+from the sources): Crimea from 2014; the occupied parts of Donetsk and Luhansk
+oblasts from February 2015 (Law 2268-VIII); from 2022, following the Ministry
+for Reintegration list of occupied territories (Order 309):
+- the south and the Azov coast from 4 March 2022;
+- northern Luhansk oblast from 1 March 2022;
+- Sievierodonetsk–Lysychansk–Popasna from 3 July 2022;
+- the right bank of Kherson oblast from 2 March to 11 November 2022;
+- eastern Kharkiv oblast and Lyman from 1 March to 11 September 2022;
+- northern Kyiv oblast from 25 February to 2 April 2022;
+- Avdiivka–Kurakhove from 6 January 2025.
+
+The front line after January 2025, and the occupation of Chernihiv and Sumy
+oblasts in 2022, are not modelled.
 
 ## 3. Network model (topology snapshot)
 
@@ -115,7 +134,7 @@ it.
 Pilot: attacks on the energy system of Ukraine 2022–2026 (a weekly chronology
 of generation losses and the system blackout of 23 November 2022).
 
-### 5.1 Calibration of the pilot (revision 2)
+### 5.1 Calibration of the pilot (revision 3)
 
 Sourced inputs: occupied or destroyed thermal plants (Starobeshivska and Zuivska
 from 2017; Luhansk, Zaporizhzhia and Vuhlehirska in 2022; Kurakhove inoperable
@@ -131,11 +150,19 @@ when Ukrenergo reported no deficit.
 
 | Check | Reported | Model | Role |
 | --- | --- | --- | --- |
-| 23.11.2022, 17:00 Kyiv, consumers without supply | ≥ 50% | 67% | validation |
-| 24.11.2022, share of needs not covered | ~50% | 63% | validation |
-| 30.11.2022, 11:00 Kyiv, deficit | 27% | 20% | calibration |
+| 23.11.2022, 17:00 Kyiv, consumers without supply | ≥ 50% | 69% | validation |
+| 24.11.2022, share of needs not covered | ~50% | 65.2% (limit 65%) ✗ | validation |
+| 30.11.2022, 11:00 Kyiv, deficit | 27% | 21% | calibration |
 | January 2026, peak deficit | ~7 GW | 4.7 GW | validation |
 | January 2026, available generation | ~11 GW | 13.6 GW | validation |
+
+Revision 3 takes the occupied mainland out of the system. This removes about
+0.8 GW of occupied plants that had no correction of their own (Sievierodonetsk
+CHP, Myronivska TPP, the Lysychansk refinery CHP, the Botiieve and Novoazovsk
+wind farms). After that, the 24.11 check falls just outside its tolerance. The
+parameter was not re-tuned: re-calibrating to 30.11 would raise the deficit, and
+the restart time of the nuclear plants agrees with the IAEA (reconnected on
+25.11). The model's recovery between 24.11 and 30.11 is steeper than reported.
 
 ## 6. Interface
 
@@ -150,9 +177,10 @@ model-against-fact table.
 - The engine is quasi-static: it does not model frequency dynamics; the depth of
   a collapse driven by frequency comes from the energy balance, not from the
   dynamics.
-- Only Crimea is a control area so far; occupied parts of the mainland enter
-  through plant-level corrections. Their substations and loads still count in the
-  Ukrainian network.
+- Control areas are coarse outlines; the front line after January 2025 and the
+  2022 occupation of Chernihiv and Sumy oblasts are not modelled. Damage left in
+  liberated territory (for example Kherson after 11 November 2022) is not
+  modelled either.
 - Strike targets that are not public are conditional (random) targets.
 - Line ratings and reactances are typical values; demand is a national profile.
 - OSM capacity coverage varies; unmodelled supply fills national gaps.
