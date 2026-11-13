@@ -4,21 +4,12 @@ import { periodBounds, useAppContext } from "./appContext";
 import { MASS_UNITS, formatAmount, type MassUnit } from "./balance";
 import { PROVENANCE_LABEL, PROVENANCE_TONE, periodCovered, useCoverage } from "./coverage";
 import { PeriodPicker } from "./PeriodSelect";
-import { SourcesBadge, type Source } from "./Sources";
+import { MovementForm, type MovementLine } from "./MovementForm";
+import { SourcesBadge } from "./Sources";
 import { PaneContext, openTab, tabParams, updateTab, usePaneTab } from "./tabs";
 
 type MovementColumn = "inflow" | "outflow" | "transform" | "carrier" | "revision" | "internal";
-type Movement = {
-  at: string;
-  event: string | null;
-  movement: string;
-  material: string;
-  material_name: string;
-  column: MovementColumn;
-  amount: number;
-  provenance: string;
-  sources: Source[];
-};
+type Movement = MovementLine & { column: MovementColumn };
 type Movements = {
   scope: string;
   scope_name: string;
@@ -60,6 +51,7 @@ export default function MovementsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [unit, setUnit] = useState<MassUnit>("kt");
+  const [opened, setOpened] = useState<Movement | null>(null);
   const covered = useCoverage();
   const waiting = covered.status === "loading" || (covered.status === "ready" && !periodCovered(context.from, context.to, covered.overview?.coverage ?? null));
 
@@ -134,7 +126,7 @@ export default function MovementsPage() {
       {data && !!data.total && (
         <>
           <p className="balance-note">
-            {data.total.toLocaleString("uk-UA")} рухів, маса в {unitLabel}. Кожен рух — частина однієї події, що стосується scope; сума рухів дорівнює оборотам балансу.
+            {data.total.toLocaleString("uk-UA")} рухів, маса в {unitLabel}. Кожен рух — частина однієї події, що стосується scope; сума рухів дорівнює оборотам балансу. Клік по рядку відкриває форму руху із записами БД.
           </p>
           <div className={`balance-table-wrap ${loading ? "loading" : ""}`}>
             <table className="balance-table movements-table">
@@ -149,7 +141,14 @@ export default function MovementsPage() {
               </thead>
               <tbody>
                 {rows.map((item, i) => (
-                  <tr key={`${item.event ?? item.movement}:${item.material}:${i}`} className="leaf">
+                  <tr
+                    key={`${item.event ?? item.movement}:${item.material}:${i}`}
+                    className="leaf movement-row"
+                    tabIndex={0}
+                    title="Відкрити форму руху"
+                    onClick={() => setOpened(item)}
+                    onKeyDown={(e) => e.key === "Enter" && setOpened(item)}
+                  >
                     <td className="balance-name movement-at">{moment(item.at)}</td>
                     <td className="balance-name">
                       {item.movement}
@@ -187,6 +186,7 @@ export default function MovementsPage() {
           )}
         </>
       )}
+      {opened && <MovementForm line={opened} scope={context.scope} onClose={() => setOpened(null)} />}
     </div>
   );
 }

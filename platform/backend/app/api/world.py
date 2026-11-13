@@ -421,6 +421,59 @@ def material_movements(
     return result
 
 
+RECORD_TABLES = {"events": WorldEvent, "observations": Observation, "relations": Relation}
+# Columns that hold an entity id: the form shows the entity's name next to it.
+ENTITY_COLUMNS = {"event_type_id", "entity_id", "subject_id", "object_id", "owner_entity_id"}
+
+
+def _row(record) -> dict:
+    """Every column of a stored row, as it is in the database."""
+    values = {}
+    for column in record.__table__.columns:
+        value = getattr(record, column.key)
+        values[column.name] = value.isoformat() if isinstance(value, datetime) else value
+    return values
+
+
+@router.get("/records/{table}/{record_id}")
+def stored_record(table: str, record_id: str, db: Session = Depends(get_db)) -> dict:
+    """A stored record behind a movement: all its fields, its postings and linked rows."""
+    model = RECORD_TABLES.get(table)
+    if model is None:
+        raise HTTPException(status_code=404, detail=f"Невідома таблиця {table!r}")
+    record = db.get(model, record_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Запис {table}/{record_id} не знайдено")
+    result: dict = {"table": table, "id": record_id, "fields": _row(record)}
+    rows = [result["fields"]]
+    if table == "events":
+        result["postings"] = [
+            _row(p)
+            for p in db.scalars(
+                select(Posting).where(Posting.event_id == record_id).order_by(Posting.delta, Posting.id)
+            )
+        ]
+        result["relations"] = [
+            _row(r) for r in db.scalars(select(Relation).where(Relation.cause_event_id == record_id))
+        ]
+        result["observations"] = [
+            _row(o)
+            for o in db.scalars(select(Observation).where(Observation.cause_event_id == record_id))
+        ]
+        rows += result["postings"] + result["relations"] + result["observations"]
+    ids = {row[c] for row in rows for c in ENTITY_COLUMNS if row.get(c)}
+    result["entities"] = {
+        e.id: {"name": e.name, "kind": e.kind}
+        for e in db.scalars(select(Entity).where(Entity.id.in_(ids)))
+    } if ids else {}
+    source_ids = {row["source_id"] for row in rows if row.get("source_id")}
+    result["sources"] = {
+        src.id: {"name": src.name, "url": src.url}
+        for src in db.scalars(select(Source).where(Source.id.in_(source_ids)))
+    } if source_ids else {}
+    return result
+
+
 class ComputeRequest(BaseModel):
     horizon: date
     growth_pct: float = 0.0

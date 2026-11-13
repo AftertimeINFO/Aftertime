@@ -195,3 +195,29 @@ def test_movements_add_up_to_the_balance(db):
     assert {row["movement"] for row in only["rows"]} == {flow}
     group = movements(db, "place:ghawar", START, END, crude["parent"], limit=5)
     assert group["total"] == journal["total"] and len(group["rows"]) == 5
+
+
+def test_every_movement_names_its_stored_record(db):
+    from app.api.world import stored_record
+    from app.services.world_balance import movements
+
+    journal = movements(db, "place:ghawar", START, END, "type:arab-light", limit=1000)
+    tables = {row["records"][0]["table"] for row in journal["rows"]}
+    assert tables == {"events", "observations"}
+    extract = next(row for row in journal["rows"] if row["column"] == "outflow")
+    record = stored_record("events", extract["records"][0]["id"], db)
+    assert record["fields"]["id"] == extract["event"]
+    assert record["fields"]["event_type_id"] == "type:extract"
+    assert record["entities"]["type:extract"]["name"]
+    assert sum(p["delta"] for p in record["postings"]) == pytest.approx(0, abs=1e-6)
+    assert any(abs(p["delta"]) == pytest.approx(extract["amount"]) for p in record["postings"])
+    revision = next(row for row in journal["rows"] if row["column"] == "revision")
+    estimate = stored_record("observations", revision["records"][0]["id"], db)
+    assert estimate["fields"]["property"] == "mass" and estimate["fields"]["valid_time"]
+
+    # A carrier crossing is stored as containment relations of the carrier.
+    country = movements(db, "place:saudi-arabia", START, END, limit=1000)
+    crossing = next(row for row in country["rows"] if row["column"] == "carrier")
+    assert crossing["records"] and all(r["table"] == "relations" for r in crossing["records"])
+    relation = stored_record("relations", crossing["records"][0]["id"], db)
+    assert relation["fields"]["predicate"] in {"part_of", "located_in"}

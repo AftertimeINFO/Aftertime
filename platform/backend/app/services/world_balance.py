@@ -105,9 +105,11 @@ def _ledger(
     amount is also appended to it as a movement (see ``movements``).
     """
 
-    def log(moment, event_id, key, material, column, amount, prov, sources) -> None:
+    def log(moment, event_id, key, material, column, amount, prov, sources, ref=None) -> None:
+        # ``ref`` names the stored record behind the movement: (table, id).
         if journal is not None and amount:
-            journal.append((moment, event_id, key, material, column, amount, prov, sources))
+            ref = ref or ("events", event_id)
+            journal.append((moment, event_id, key, material, column, amount, prov, sources, ref))
 
     edges = edges or [start]
     portions = list(materials)
@@ -152,14 +154,16 @@ def _ledger(
     for row in db.execute(
         text(
             """
-            SELECT subject_id, value, valid_time, evidence FROM observations
+            SELECT id, subject_id, value, valid_time, evidence FROM observations
             WHERE property = 'mass' AND unit = 'kg' AND subject_id = ANY(:ids)
               AND valid_time > :start AND valid_time <= :end
             """
         ).bindparams(bindparam("ids", type_=ARRAY(String))),
         {"ids": portions, "start": start, "end": end},
     ):
-        estimates[row.valid_time].append((row.subject_id, float(row.value), row.evidence or {}))
+        estimates[row.valid_time].append(
+            (row.subject_id, float(row.value), row.evidence or {}, row.id)
+        )
 
     # Timeline: carrier crossings at a moment come before the postings of that moment,
     # so the cargo crosses with the amount it had just before; an estimate comes last
@@ -182,7 +186,7 @@ def _ledger(
         bucket = max(bisect_left(edges, moment) - 1, 0)
         flows, breakdown = flows_at[bucket], breakdown_at[bucket]
         if kind == 2:
-            for portion, value, evidence in estimates[moment]:
+            for portion, value, evidence, observation in estimates[moment]:
                 change = value - running[portion]
                 running[portion] = value
                 if change and index.contains(portion, moment):
@@ -194,6 +198,7 @@ def _ledger(
                     log(
                         moment, None, (REVISION, "", None), materials[portion], "revision",
                         change, evidence.get("provenance", "derived"), refs,
+                        ("observations", observation),
                     )
             continue
         if kind == 0:
@@ -212,7 +217,7 @@ def _ledger(
                     )
                     log(
                         moment, None, (CARRIER, "", carrier), materials[portion], "carrier",
-                        sign * amount, "assumed", [],
+                        sign * amount, "assumed", [], ("crossing", carrier),
                     )
             continue
 
@@ -775,7 +780,7 @@ def movements(
 
     rows = []
     totals = dict.fromkeys(MOVEMENT_COLUMNS, 0.0)
-    for moment, event_id, key, material, column, amount, prov, sources in journal:
+    for moment, event_id, key, material, column, amount, prov, sources, ref in journal:
         if row_id and not _under(material, row_id, parent):
             continue
         text_label = label(key)
@@ -793,8 +798,11 @@ def movements(
                 "amount": amount,
                 "provenance": prov,
                 "sources": sources or [],
+                "records": [{"table": ref[0], "id": ref[1]}],
             }
         )
+    page = rows[offset : offset + limit]
+    _resolve_crossings(db, page)
     return {
         "scope": scope_id,
         "scope_name": _names(db, {scope_id}).get(scope_id, {}).get("name", scope_id),
@@ -806,5 +814,26 @@ def movements(
         "offset": offset,
         "limit": limit,
         "totals": totals,
-        "rows": rows[offset : offset + limit],
+        "rows": page,
     }
+
+
+def _resolve_crossings(db: Session, rows: list[dict]) -> None:
+    """A carrier crossing is stored as the containment relations that end and start then."""
+    for row in rows:
+        record = row["records"][0]
+        if record["table"] != "crossing":
+            continue
+        moment = datetime.fromisoformat(row["at"])
+        ids = db.execute(
+            text(
+                """
+                SELECT id FROM relations
+                WHERE subject_id = :carrier AND predicate IN ('part_of', 'located_in')
+                  AND (valid_to = :at OR valid_from = :at)
+                ORDER BY valid_from NULLS FIRST, id
+                """
+            ),
+            {"carrier": record["id"], "at": moment},
+        ).scalars()
+        row["records"] = [{"table": "relations", "id": rid} for rid in ids]
